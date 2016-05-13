@@ -8,40 +8,29 @@
 package net.deepstorage.compscan;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedWriter;
 import java.io.IOException;
-import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import net.deepstorage.compscan.compress.*;
 
 /**
  * CompScan's main class.
  * 
- * @author Ramon A. Lovato (ramonalovato.com)
+ * @author Ramon A. Lovato
  * @version 1.0
  */
 public class CompScan {
-	// Expected number of arguments.
-	public static final int MIN_ARGS = 5;
-	// Positional arguments.
-	public static final String[] POSITIONAL_ARGS = {
-		"pathIn",
-		"pathOut",
-		"blockSize",
-		"superblockSize",
-		"format"
-	};
 	// Valid file extensions.
 	public static final String[] VALID_EXTENSIONS = {
 			".vhd",
@@ -52,17 +41,21 @@ public class CompScan {
 	public static final int DEFAULT_BUFFSIZE = 1000000;
 	// Symbolic constant representing unthrottled IO rate.
 	public static final int UNLIMITED = 0;
+	// Subpackage prefix for the compression package.
+	public static final String COMPRESSION_SUBPACKAGE = "compress";
+	
+	private boolean setupLock;
+	private Date date;
 	
 	private int buffSize;
 	private int ioRate;
-	
-	private Date date;
 	private Path pathIn;
 	private Path pathOut;
 	private int blockSize;
 	private int superblockSize;
-	private String format;
-	private boolean vmdkMode;
+	private String formatString;
+	private ScanMode scanMode;
+	private Compressor compressor;
 	
 	/**
 	 * Default constructor.
@@ -70,187 +63,45 @@ public class CompScan {
 	 * @param args CLI arguments.
 	 */
 	private CompScan(String[] args) throws IllegalArgumentException {
+		setupLock = false;
 		date = Calendar.getInstance().getTime();
-		vmdkMode = false;
+		scanMode = ScanMode.DIRECTORY;
 		buffSize = DEFAULT_BUFFSIZE;
 		ioRate = UNLIMITED;
-		parseArgs(args);
+		InputParser ip = new InputParser(this);
+		ip.parse(args);
 	}
-	
+
 	/**
-	 * Parse a single optional argument.
+	 * Allows other package members, notably the InputParser, to set fields. Deliberately package-private.
 	 * 
-	 * @param arg A single optional CLI argument.
-	 * @param it A ListIterator into the argument list. Used for accessing the next argument
-	 *           if necessary.
-	 * @throws IllegalArgumentException if an argument isn't recognized.
+	 * @param buffSize Input buffer size.
+	 * @param ioRate IOPS limit.
+	 * @param pathIn Input path.
+	 * @param pathOut Output path.
+	 * @param blockSize Block size in bytes.
+	 * @param superblockSize Superblock size in bytes.
+	 * @param scanMode Whether to scan a single VMDK or a directory.
+	 * @param formatString Name of the compression scheme to use.
+	 * @param compressor Compressor associated with formatString.
+	 * @throws Exception if called more than once.
 	 */
-	private void parseOptional(String arg, ListIterator<String> it) throws IllegalArgumentException {
-		switch (arg) {
-		case "-h": case "--help":
-			printHelp(null);
-			System.exit(0);
-		break;
-		// VMDK.
-		case "--vmdk":
-			vmdkMode = true;
-			break;
-		// IO rate.
-		case "--rate":
-			if (!it.hasNext()) {
-				throw new IllegalArgumentException(
-						"Reached end of arguments without finding value for rate.");
-			}
-			try {
-				ioRate = Integer.parseInt(it.next());
-				if (ioRate < 0) {
-					throw new NumberFormatException();
-				}
-			} catch (NumberFormatException ex) {
-				throw new IllegalArgumentException(
-						String.format(
-								"Optional parameter rate requires nonnegative integer (default: %1$d = unlimited MB/sec).",
-								UNLIMITED));
-			}
-			break;
-		// Buffer size.
-		case "--buffer-size":
-			if (!it.hasNext()) {
-				throw new IllegalArgumentException(
-						"Reached end of arguments without finding value for buffer size.");
-			}
-			try {
-				buffSize = Integer.parseInt(it.next());
-				if (buffSize < 1) {
-					throw new NumberFormatException();
-				}
-			} catch (NumberFormatException ex) {
-				throw new IllegalArgumentException(
-						String.format(
-								"Optional parameter buffer size requires nonnegative integer (default: %1$d bytes).",
-								DEFAULT_BUFFSIZE));
-			}
-			break;
-		// Default.
-		default:
-			throw new IllegalArgumentException(
-					String.format(
-							"Unknown optional argument \"%1$s\".", arg));
+	void setup(int buffSize, int ioRate, Path pathIn, Path pathOut, int blockSize,int superblockSize,
+			ScanMode scanMode, String formatString, Compressor compressor) {
+		if (setupLock) {
+			System.err.println("CompScan.setup cannot be called more than once.");
+			System.exit(1);
 		}
-	}
-	
-	/**
-	 * Parse a single positional argument.
-	 * 
-	 * @param arg A single optional CLI argument.
-	 * @param it A ListIterator into the argument list. Used for accessing the next argument
-	 *           if necessary.
-	 * @throws IllegalArgumentException if an argument isn't valid or recognized.
-	 */
-	private void parsePositional(String arg, ListIterator<String> it, int count)
-			throws IllegalArgumentException {
-		String key = (count < POSITIONAL_ARGS.length ? POSITIONAL_ARGS[count] : "");
-		switch (key) {
-		// Input path.
-		case "pathIn":
-			pathIn = Paths.get(arg);
-			if (!Files.exists(pathIn)) {
-				throw new IllegalArgumentException(
-						String.format("Input path \"%1$s\" does not exist.",  arg));
-			} else if (!isValidPath(pathIn)) {
-				throw new IllegalArgumentException(
-						String.format("Input path \"%1$s\" is not a valid directory, "
-								+ ".vhd, .vhdx, or .vmdk.", arg));
-			}
-			break;
-		// Output path.
-		case "pathOut":
-			pathOut = Paths.get(arg);
-			if (Files.exists(pathOut)) {
-				throw new IllegalArgumentException(
-						String.format("Output path \"%1$s\" already exist.", arg));
-			} else if (!Files.isDirectory(pathOut.getParent())) {
-				throw new IllegalArgumentException(
-						String.format(
-								"Output directory \"%1$s\" does not exist.",
-								pathOut.getParent().toString()));
-			}
-			break;
-		// Block size.
-		case "blockSize":
-			try {
-				blockSize = Integer.parseInt(arg);
-				if (blockSize < 1) {
-					throw new NumberFormatException();
-				}
-			} catch (NumberFormatException ex) {
-				throw new IllegalArgumentException(
-						String.format(
-								"Block size must be a positive integer -- \"%1$s\" given.",
-								arg));
-			}
-			break;
-		// Superblock size.
-		case "superblockSize":
-			try {
-				superblockSize = Integer.parseInt(arg);
-				if (superblockSize < 1 || superblockSize < blockSize) {
-					throw new NumberFormatException();
-				}
-			} catch (NumberFormatException ex) {
-				throw new IllegalArgumentException(
-						String.format(
-								"Superblock size must be a positive integer >= block size -- "
-								+ "\"%1$s\" given.",
-								arg));
-			}
-			break;
-		// Compression format.
-		case "format":
-			format = arg;
-			break;
-		// Default.
-		default:
-			throw new IllegalArgumentException(
-					String.format(
-							"Unknown positional argument: \"%1$s\".", arg));
-					
-		}
-		// End switch.
-	}
-	
-	/**
-	 * Parse CLI arguments.
-	 * 
-	 * @param args CLI arguments.
-	 * @throws IllegalArgumentException if an argument is invalid or unrecognized.
-	 */
-	private void parseArgs(String[] args) throws IllegalArgumentException {
-		if (args.length < MIN_ARGS) {
-			throw new IllegalArgumentException(
-					String.format(
-							"Invalid number of arguments -- %1$d given, %2$d expected.",
-							args.length, MIN_ARGS));
-		}
-		
-		ListIterator<String> it = Arrays.asList(args).listIterator();
-		int count = 0;
-		while (it.hasNext()) {
-			String arg = it.next();
-			if (arg.startsWith("-")) {
-				parseOptional(arg, it);
-			} else {
-				parsePositional(arg, it, count++);
-			}
-		}
-		
-		if (vmdkMode && !isVMDK(pathIn)) {
-			throw new IllegalArgumentException(
-					String.format(
-							"VMDK mode specified but \"%1$d\" does not appear to be a "
-							+ "valid .vhd, .vhdx, or .vmdk.",
-							pathIn));
-		}
+		this.buffSize = buffSize;
+		this.ioRate = ioRate;
+		this.pathIn = pathIn;
+		this.pathOut = pathOut;
+		this.blockSize = blockSize;
+		this.superblockSize = superblockSize;
+		this.formatString = formatString;
+		this.scanMode = scanMode;
+		this.compressor = compressor;
+		setupLock = true;
 	}
 	
 	/**
@@ -264,7 +115,7 @@ public class CompScan {
 		results.set("superblock size", superblockSize);
 		
 		try {
-			if (vmdkMode) {
+			if (scanMode == ScanMode.FILE) {
 				scanVMDK(results);
 			} else {
 				scanDirectory(results);
@@ -317,39 +168,60 @@ public class CompScan {
 		
 		bs.close();
 	}
-
 	
 	/**
-	 * Check if path is valid.
+	 * Save the results to a CSV file.
 	 * 
-	 * @param path Path to verify.
-	 * @return True if path is valid.
+	 * @param results Results to save.
+	 * @return The actual path where the file was saved. Might not be the same as pathOut if pathOut already exists.
+	 * @throws IOException if an IO error occurred.
 	 */
-	private static Boolean isValidPath(Path path) {
-		if (path == null) {
-			return false;
-		} else if (Files.isDirectory(path)) {
-			return true;
-		} else {
-			return isVMDK(path);
+	public String writeResults(Results results) throws IOException {
+		Path writePath = pathOut;
+		if (Files.exists(writePath)) {
+			int i = 0;
+			String[] partials = writePath.toString().split("\\.(?=\\w+$)");
+			while (Files.exists(writePath)) {
+				String pathString = (partials.length < 2 ?
+						String.format("%1$s (%2$d).%3$s", partials[0], ++i, partials[1]) :
+						String.format("%1$s %2$d", partials[0]));
+				writePath = Paths.get(pathString);
+			}
 		}
+		
+		try (BufferedWriter bw = Files.newBufferedWriter(writePath)) {
+			bw.write(results.toString());
+		} catch (IOException e) {
+			throw e;
+		}
+		return writePath.toString();
 	}
 	
 	/**
-	 * Check if path is a valid virtual disk file.
+	 * Getter for scanMode.
 	 * 
-	 * @param path Path to verify.
-	 * @return True if path is a valid virtual disk file.
+	 * @return The ScanMode.
 	 */
-	private static Boolean isVMDK(Path path) {
-		if (path == null) {
-			return false;
-		} else {
-			String[] partials = path.getFileName().toString().split("\\.(?=\\w+$)");
-			// Short-circuits.
-			return (partials.length == 2
-					&& Arrays.asList(VALID_EXTENSIONS).contains(partials[1].toLowerCase()));
-		}
+	public ScanMode getScanMode() {
+		return scanMode;
+	}
+	
+	/**
+	 * Getter for buffSize.
+	 * 
+	 * @return The read buffer size in bytes.
+	 */
+	public int getBuffSize() {
+		return buffSize;
+	}
+	
+	/**
+	 * Getter for ioRate.
+	 * 
+	 * @return The IOPS limit (0 = UNLIMITED).
+	 */
+	public int getIORate() {
+		return ioRate;
 	}
 	
 	/**
@@ -357,7 +229,7 @@ public class CompScan {
 	 * 
 	 * @param custom a custom message to print
 	 */
-	private static void printHelp(String custom) {
+	public static void printHelp(String custom) {
 		System.out.format(
 				"Usage: CompScan [-h] [--vmdk] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
 				+ "pathIn pathOut name blockSize superblockSize format%n"
@@ -366,7 +238,7 @@ public class CompScan {
 				+ "         pathOut           where to save the output%n"
 				+ "         blockSize         bytes per block%n"
 			    + "         superblockSize    bytes per superblock%n"
-				+ "         format            compression scheme to use%n"
+				+ "         formatString      compression format to use%n"
 			    + "Optional Arguments%n"
 				+ "         -h, --help        print this help message%n"
 				+ "         --vmdk            flag to enable per-VMDK reporting instead of aggregate%n"
@@ -377,6 +249,13 @@ public class CompScan {
 		if (custom != null && custom.length() > 0) {
 			System.out.format("%n" + custom + "%n");
 		}
+	}
+	
+	/**
+	 * Convenience overload for printHelp.
+	 */
+	public static void printHelp() {
+		printHelp(null);
 	}
 
 	/**
@@ -396,7 +275,20 @@ public class CompScan {
 		}
 		
 		Results results = cs.run();
+		try {
+			String pathOut = cs.writeResults(results);
+		} catch (IOException e) {
+			System.err.println("Unable to save output.");
+			e.printStackTrace();
+		}
 		System.out.println(results.toString());
+	}
+	
+	/**
+	 * A nested enum for symbolic constants to indicate single-file or directory mode.
+	 */
+	public static enum ScanMode {
+		FILE, DIRECTORY;
 	}
 	
 	/**
@@ -407,8 +299,11 @@ public class CompScan {
 				"block size",
 				"superblock size",
 				"bytes read",
-				"compressed blocks (raw)",
-				"compressed blocks (sum, rounded-up)"
+				"blocks read",
+				"superblocks read",
+				"compressed bytes",
+				"compressed blocks",
+				"actual bytes needed"
 		};
 		private Map<String, Long> map;
 		private String name;
