@@ -8,6 +8,8 @@
 package net.deepstorage.compscan;
 
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * The abstract Compressor class defines the procedures needed for a compression scheme to be used with CompScan.
@@ -15,7 +17,8 @@ import java.util.Arrays;
  * @author Ramon A. Lovato
  * @version 1.0
  */
-public abstract class Compressor {
+public class Compressor {
+	private CompressionInterface compressionInterface;
 	private byte[] buffer;
 	private final int readBuffSize;
 	private final int blockSize;
@@ -42,18 +45,32 @@ public abstract class Compressor {
 			throw new IllegalArgumentException("Buffer size must be a positive integer.");
 		}
 		this.readBuffSize = readBuffSize;
-		if (blockSize < 1 || blockSize < readBuffSize) {
-			throw new IllegalArgumentException("Block size must be a positive integer not smaller than read buffer size.");
+		if (blockSize < 1 || blockSize >= readBuffSize) {
+			throw new IllegalArgumentException(String.format(
+					"Block size (%d) must be a positive integer greater than or equal to read buffer size (%d).",
+					blockSize, readBuffSize));
 		}
 		this.blockSize = blockSize;
 		if (superblockSize < 1 || superblockSize % blockSize != 0) {
-			throw new IllegalArgumentException("Superblock size must be a positive integer multiple of block size.");
+			throw new IllegalArgumentException(String.format(
+					"Superblock size (%d) must be a positive integer multiple of block size (%d).",
+					superblockSize, blockSize));
 		}
 		this.superblockSize = superblockSize;
 		if (formatString == null || formatString.length() == 0) {
 			throw new IllegalArgumentException("Format string cannot be null or empty string.");
 		}
 		this.formatString = formatString;
+		try {
+			compressionInterface = getCompressionInterface(formatString);
+			System.out.println(String.format("Using compression interface \"%s\".%n", formatString));
+		} catch (ClassNotFoundException e) {
+			throw new IllegalArgumentException(
+					String.format(
+							"Unable to locate Compressor for compression format \"%s\".", formatString));
+		} catch (Exception e) {
+			throw new IllegalArgumentException(e.getMessage());
+		}
 		bytesRead = 0L;
 		blocksRead = 0L;
 		superblocksRead = 0L;
@@ -71,6 +88,29 @@ public abstract class Compressor {
 		for (int i = 0; i < buffer.length; i++) {
 			buffer[i] = 0x0;
 		}
+	}
+	
+	/**
+	 * Get the CompressionInterface for the specified format string.
+	 * 
+	 * @param formatString Name of the compression scheme to retrieve.
+	 * @return Method "compress(byte[] data)" associated with the CompressionInterface for formatString.
+	 * @throws IllegalArgumentException if the Compressor for the format string does not exist.
+	 */
+	private CompressionInterface getCompressionInterface(String formatString) throws Exception {	
+		String compressName = String.join(".", getClass().getPackage().getName(), CompScan.COMPRESSION_SUBPACKAGE, formatString);
+		
+		Class<?> compression = Class.forName(compressName);
+		Set<Class<?>> interfaces = new HashSet<>(
+				Arrays.asList(
+						compression.getInterfaces()));
+		if (!interfaces.contains(CompressionInterface.class)) {
+			throw new Exception(
+					String.format(
+							"Class \"%1$s\" found for format string \"%2$s\" but is not a valid Compressor.",
+							compression.getClass().getName(), formatString));
+		}
+		return (CompressionInterface) compression.newInstance();
 	}
 	
 	/**
@@ -129,11 +169,12 @@ public abstract class Compressor {
 		if (data.length != buffer.length) {
 			throw new BufferLengthException(
 					String.format(
-							"Compressor.feedData requires exactly one superblock of data: \"$1%d\" bytes.", buffer.length));
+							"Compressor.feedData requires exactly one superblock of data: $1%d bytes given, $2%d bytes expected.",
+							data.length, buffer.length));
 		}
 		
 		// We want the input data to be exactly one superblock in size. 
-		byte[] compressed = compress(data);
+		byte[] compressed = compressionInterface.compress(data, blockSize);
 
 		CompressionInfo ci = new CompressionInfo(data.length, compressed.length);
 		bytesRead += ci.bytesRead;
@@ -154,14 +195,6 @@ public abstract class Compressor {
 		return new CompressionInfo(bytesRead, blocksRead, superblocksRead, compressedBytes,
 				                   compressedBlocks, actualBytes);
 	}
-	
-	/**
-	 * Compress the data.
-	 * 
-	 * @param data Data to compress.
-	 * @return The compressed data.
-	 */
-	protected abstract byte[] compress(byte[] data) throws BufferLengthException;
 	
 	/**
 	 * Nested data class for encapsulating compression info.

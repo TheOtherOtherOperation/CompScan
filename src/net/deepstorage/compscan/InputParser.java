@@ -1,5 +1,9 @@
 /**
+ * CompScan - a tool for estimating the compressibility of a dataset.
  * 
+ * Copyright (c) 2016 DeepStorage, LLC (deepstorage.net) and Ramon A. Lovato (ramonalovato.com).
+ * 
+ * See the file LICENSE for copying permission.
  */
 package net.deepstorage.compscan;
 
@@ -7,9 +11,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.ListIterator;
-import java.util.Set;
+import java.util.Map;
+import java.util.Queue;
 
 import net.deepstorage.compscan.CompScan.ScanMode;
 
@@ -31,6 +37,8 @@ public class InputParser {
 	
 	private CompScan compScan;
 	
+	private Map<String, Boolean> assigned;
+	
 	private int buffSize;
 	private int ioRate;
 	private Path pathIn;
@@ -39,6 +47,7 @@ public class InputParser {
 	private int superblockSize;
 	private String formatString;
 	private ScanMode scanMode;
+	private boolean overwriteOK;
 	private Compressor compressor;
 	
 	/**
@@ -47,10 +56,19 @@ public class InputParser {
 	 * @param compScan CompScan instance to configure.
 	 */
 	public InputParser(CompScan compScan) {
+		assigned = new HashMap<String, Boolean>();
+		
 		this.compScan = compScan;
 		scanMode = compScan.getScanMode();
 		buffSize = compScan.getBuffSize();
 		ioRate = compScan.getIORate();
+		overwriteOK = false;
+		
+		for (String s : POSITIONAL_ARGS) {
+			if (!assigned.containsKey(s)) {
+				assigned.put(s, false);
+			}
+		}
 	}
 	
 	
@@ -87,7 +105,11 @@ public class InputParser {
 							pathIn));
 		}
 		
-		compScan.setup(buffSize, ioRate, pathIn, pathOut, blockSize, superblockSize, scanMode, formatString, compressor);
+		checkPositionals();
+		
+		compScan.setup(buffSize, ioRate, pathIn, pathOut, blockSize, superblockSize, scanMode,
+				       overwriteOK, formatString, compressor);
+		printConfig();
 	}
 	
 	/**
@@ -117,7 +139,7 @@ public class InputParser {
 		// Output path.
 		case "pathOut":
 			pathOut = Paths.get(arg);
-			if (Files.exists(pathOut)) {
+			if (Files.exists(pathOut) && !overwriteOK) {
 				throw new IllegalArgumentException(
 						String.format("Output path \"%1$s\" already exist.", arg));
 			} else if (!Files.isDirectory(pathOut.getParent())) {
@@ -159,11 +181,7 @@ public class InputParser {
 		// Compression format.
 		case "formatString":
 			formatString = arg;
-			try {
-				compressor = getCompressor(formatString);
-			} catch (IllegalArgumentException ex) {
-				throw ex;
-			}
+			compressor = new Compressor(buffSize, blockSize, superblockSize, formatString);
 			break;
 		// Default.
 		default:
@@ -173,6 +191,9 @@ public class InputParser {
 					
 		}
 		// End switch.
+		
+		// Only reached if an exception wasn't thrown.
+		assigned.replace(key, true);
 	}
 	
 	/**
@@ -229,6 +250,10 @@ public class InputParser {
 								CompScan.DEFAULT_BUFFSIZE));
 			}
 			break;
+		// Overwrite output.
+		case "--overwrite":
+			overwriteOK = true;
+			break;
 		// Default.
 		default:
 			throw new IllegalArgumentException(
@@ -238,56 +263,49 @@ public class InputParser {
 	}
 	
 	/**
-	 * Get the Compressor for the specified format string.
-	 * 
-	 * @param formatString Name of the compression scheme to retrieve.
-	 * @return Compressor for the format string.
-	 * @throws IllegalArgumentException if the Compressor for the format string does not exist.
+	 * Check that all positional arguments were assigned.
 	 */
-	private Compressor getCompressor(String formatString) throws IllegalArgumentException {
-		class WrongClassException extends Exception {
-			WrongClassException(String message) {
-				super(message);
+	private void checkPositionals() {
+		Queue<String> incompletes = new LinkedList<String>();
+		for (String s : POSITIONAL_ARGS) {
+			if (!assigned.containsKey(s) || assigned.get(s) == false) {
+				incompletes.add(s);
 			}
 		}
-		
-		String compressName = String.join(".", getClass().getPackage().getName(), CompScan.COMPRESSION_SUBPACKAGE, formatString);
-		
-		try {
-			Class<?> compressor = Class.forName(compressName);
-			Set<Class<?>> classSet = getAncestors(compressor);
-			if (!classSet.contains(Compressor.class.getClass())) {
-				throw new WrongClassException(
-						String.format(
-								"Class \"%1$s\" found for format string \"%2$s\" but is not a valid Compressor.",
-								compressor.getClass().getName(), formatString));
-			}
-		} catch (ClassNotFoundException e) {
-			throw new IllegalArgumentException(
-					String.format(
-							"Unable to locate Compressor for compression format \"%s\".", formatString));
-		} catch (WrongClassException e) {
-			throw new IllegalArgumentException(e.getMessage());
+		if (incompletes.size() > 0) {
+			String incompleteString = String.format(
+					"Missing the following positional arguments:%n    - " +
+					String.join("%n    - ", incompletes) + "%n");
+			throw new IllegalArgumentException(incompleteString);
 		}
-		
-		System.out.println(String.format("Using Compressor \"%s\".", compressName));
-		return (Compressor) compressor;
 	}
 	
 	/**
-	 * Traverse the class hierarchy to get all superclasses of a specified child class.
-	 * 
-	 * @param child Leaf class for which to get the superclasses.
-	 * @return Set containing all superclasses of child.
+	 * Print the current configuration.
 	 */
-	private Set<Class<?>> getAncestors(Class<?> child) {
-		Set<Class<?>> classSet = new HashSet<>();
-		Class<?> c = child.getClass();
-		while (c != null) {
-			classSet.add(c);
-			c = c.getSuperclass();
-		}
-		return classSet;
+	private void printConfig() {
+		String setupString = String.format(
+				"Configuration:%n" +
+				"    - buffSize:          %1$d%n" +
+				"    - ioRate:            %2$s%n" +
+				"    - pathIn:            %3$s%n" +
+				"    - pathOut:           %4$s%n" +
+				"    - blockSize:         %5$s%n" +
+				"    - superblockSize:    %6$d%n" +
+				"    - scanMode:          %7$s%n" +
+				"    - overwriteOK:       %8$s%n" +
+				"    - formatString:      %9$s%n",
+				buffSize,
+				(ioRate == 0 ? "UNLIMITED" : Integer.toString(ioRate)),
+				pathIn,
+				pathOut,
+				blockSize,
+				superblockSize,
+				scanMode.toString(),
+				Boolean.toString(overwriteOK),
+				formatString
+				);
+		System.out.println(setupString);
 	}
 	
 	/**

@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import net.deepstorage.compscan.compress.*;
 
 /**
  * CompScan's main class.
@@ -53,8 +52,9 @@ public class CompScan {
 	private Path pathOut;
 	private int blockSize;
 	private int superblockSize;
-	private String formatString;
 	private ScanMode scanMode;
+	private boolean overwriteOK;
+	private String formatString;
 	private Compressor compressor;
 	
 	/**
@@ -68,6 +68,7 @@ public class CompScan {
 		scanMode = ScanMode.DIRECTORY;
 		buffSize = DEFAULT_BUFFSIZE;
 		ioRate = UNLIMITED;
+		overwriteOK = false;
 		InputParser ip = new InputParser(this);
 		ip.parse(args);
 	}
@@ -82,12 +83,13 @@ public class CompScan {
 	 * @param blockSize Block size in bytes.
 	 * @param superblockSize Superblock size in bytes.
 	 * @param scanMode Whether to scan a single VMDK or a directory.
+	 * @param overwriteOK Whether it's allowed to overwrite the output file.
 	 * @param formatString Name of the compression scheme to use.
 	 * @param compressor Compressor associated with formatString.
 	 * @throws Exception if called more than once.
 	 */
 	void setup(int buffSize, int ioRate, Path pathIn, Path pathOut, int blockSize,int superblockSize,
-			ScanMode scanMode, String formatString, Compressor compressor) {
+			ScanMode scanMode, boolean overwriteOK, String formatString, Compressor compressor) {
 		if (setupLock) {
 			System.err.println("CompScan.setup cannot be called more than once.");
 			System.exit(1);
@@ -100,6 +102,7 @@ public class CompScan {
 		this.superblockSize = superblockSize;
 		this.formatString = formatString;
 		this.scanMode = scanMode;
+		this.overwriteOK = overwriteOK;
 		this.compressor = compressor;
 		setupLock = true;
 	}
@@ -115,58 +118,13 @@ public class CompScan {
 		results.set("superblock size", superblockSize);
 		
 		try {
-			if (scanMode == ScanMode.FILE) {
-				scanVMDK(results);
-			} else {
-				scanDirectory(results);
-			}
+			// TODO
 		} catch (IOException e) {
 			System.err.println("A filesystem IO error ocurred.");
 			System.exit(1);
 		}
 		
 		return results;
-	}
-	
-	/**
-	 * Scan a VMDK.
-	 * 
-	 * @param res Results object in which to save the results.
-	 * @throws IOException if an IO error occurs.
-	 */
-	private void scanVMDK(Results res) throws IOException {
-		scanFile(pathIn, null, res);
-	}
-	
-	/**
-	 * Scan a directory.
-	 * 
-	 * @param res Results object in which to save the results.
-	 * @throws IOException if file access failed.
-	 */
-	private void scanDirectory(Results res) throws IOException {
-		Stream<Path> fileStream = Files.walk(pathIn);
-		Iterator<Path> it = fileStream.iterator();
-		
-		
-		
-		fileStream.close();
-	}
-	
-	/**
-	 * Scan a file.
-	 * 
-	 * @param p1 Primary file to scan.
-	 * @param p2 If scanning p1 reaches the end of the file in the middle of a superblock,
-	 *           scanning continues with the beginning of p2 until the superblock is filled.
-	 *           If null, the superblock is terminated prematurely.
-	 * @param res Results object in which to save the results.
-	 * @throws IOException if file access failed.
-	 */
-	private void scanFile(Path p1, Path p2, Results res) throws IOException {
-		BufferedInputStream bs = new BufferedInputStream(Files.newInputStream(p1), buffSize);
-		
-		bs.close();
 	}
 	
 	/**
@@ -178,7 +136,7 @@ public class CompScan {
 	 */
 	public String writeResults(Results results) throws IOException {
 		Path writePath = pathOut;
-		if (Files.exists(writePath)) {
+		if (Files.exists(writePath) && !overwriteOK) {
 			int i = 0;
 			String[] partials = writePath.toString().split("\\.(?=\\w+$)");
 			while (Files.exists(writePath)) {
@@ -231,7 +189,7 @@ public class CompScan {
 	 */
 	public static void printHelp(String custom) {
 		System.out.format(
-				"Usage: CompScan [-h] [--vmdk] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
+				"Usage: CompScan [-h] [--help] [--overwrite] [--vmdk] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
 				+ "pathIn pathOut name blockSize superblockSize format%n"
 				+ "Positional Arguments%n"
 			    + "         pathIn            path to the dataset%n"
@@ -241,6 +199,7 @@ public class CompScan {
 				+ "         formatString      compression format to use%n"
 			    + "Optional Arguments%n"
 				+ "         -h, --help        print this help message%n"
+			    + "         --overwrite       whether overwriting the output file is allowed%n"
 				+ "         --vmdk            flag to enable per-VMDK reporting instead of aggregate%n"
 				+ "         --rate MB_PER_SEC maximum MB/sec we're allowed to read%n"
 				+ "         --buffer-size BUFFER_SIZE     set the read buffer size in bytes%n"
@@ -277,11 +236,15 @@ public class CompScan {
 		Results results = cs.run();
 		try {
 			String pathOut = cs.writeResults(results);
+			System.out.println(
+					String.format(
+							"Output saved as \"%s\".%n", pathOut));
 		} catch (IOException e) {
 			System.err.println("Unable to save output.");
 			e.printStackTrace();
+		} finally {
+			System.out.println(results.toString());
 		}
-		System.out.println(results.toString());
 	}
 	
 	/**

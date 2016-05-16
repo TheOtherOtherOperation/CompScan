@@ -7,7 +7,7 @@
  */
 package net.deepstorage.compscan.compress;
 
-import net.deepstorage.compscan.Compressor;
+import net.deepstorage.compscan.CompressionInterface;
 
 /**
  * An LZW Compressor for CompScan.
@@ -15,15 +15,9 @@ import net.deepstorage.compscan.Compressor;
  * @author Ramon A. Lovato
  * @version 1.0
  */
-public class LZW extends Compressor {
-
-	public LZW(int buffSize, int blockSize, int superblockSize, String formatString)
-			throws IllegalArgumentException {
-		super(buffSize, blockSize, superblockSize, formatString);
-	}
-
+public class None implements CompressionInterface {
 	@Override
-	public byte[] compress(byte[] data) {
+	public byte[] compress(byte[] data, int blockSize) {
 		// TODO Auto-generated method stub
 		return data;
 	}

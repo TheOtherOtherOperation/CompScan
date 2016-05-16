@@ -11,8 +11,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.Queue;
 import java.util.stream.Stream;
 
 /**
@@ -23,22 +21,23 @@ import java.util.stream.Stream;
  */
 public class FileWalker implements AutoCloseable {
 	private Path root;
-	private CompScan.ScanMode mode;
 	private Stream<Path> fileStream;
 	private Iterator<Path> iterator;
-	private Queue<Path> current;
+	private Path previous;
+	private Path next;
 	
 	/**
 	 * Create a new FileScanner beginning at root.
+	 * 
+	 * @param root Path to the root of the datastore to scan.
 	 * @throws IOException if the file stream couldn't be opened.
 	 */
-	public FileWalker(Path root, CompScan.ScanMode mode) throws IOException {
+	public FileWalker(Path root) throws IOException {
 		this.root = root;
-		this.mode = mode;
-		
 		fileStream = Files.walk(this.root);
 		iterator = fileStream.iterator();
-		current = new LinkedList<Path>();
+		previous = null;
+		next = null;
 	}
 	
 	/**
@@ -47,8 +46,18 @@ public class FileWalker implements AutoCloseable {
 	 * @return Path to the next file or null if no next file.
 	 */
 	public Path next() {
-		
-		return (iterator.hasNext() ? iterator.next() : null);
+		previous = next;
+		next = (iterator.hasNext() ? iterator.next() : null);
+		return next;
+	}
+	
+	/**
+	 * Get the previous file.
+	 * 
+	 * @return Path to the previous file or null if no previous file.
+	 */
+	public Path previous() {
+		return previous;
 	}
 	
 	/**
@@ -58,6 +67,33 @@ public class FileWalker implements AutoCloseable {
 	 */
 	public boolean hasNext() {
 		return iterator.hasNext();
+	}
+	
+	/**
+	 * Check if the walker has a previous element.
+	 * 
+	 * @return True if the walker has a previous element. 
+	 */
+	public boolean hasPrevious() {
+		return previous != null;
+	}
+	
+	/**
+	 * Get the stream iterator currently in use.
+	 * 
+	 * @return Iterator<Path> currently being used.
+	 */
+	public Iterator<Path> getIterator() {
+		return iterator;
+	}
+	
+	/**
+	 * Get the root of the datastore being scanned.
+	 * 
+	 * @return Root of the datastore being scanned.
+	 */
+	public Path getRoot() {
+		return root;
 	}
 
 	@Override
