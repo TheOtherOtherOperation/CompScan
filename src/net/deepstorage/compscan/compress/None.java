@@ -10,7 +10,7 @@ package net.deepstorage.compscan.compress;
 import net.deepstorage.compscan.CompressionInterface;
 
 /**
- * An LZW Compressor for CompScan.
+ * None is a direct pass-through scheme that returns the input buffer unchanged. Used for testing.
  * 
  * @author Ramon A. Lovato
  * @version 1.0

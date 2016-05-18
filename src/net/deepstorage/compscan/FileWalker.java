@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.stream.Stream;
 
 /**
@@ -23,8 +25,7 @@ public class FileWalker implements AutoCloseable {
 	private Path root;
 	private Stream<Path> fileStream;
 	private Iterator<Path> iterator;
-	private Path previous;
-	private Path next;
+	private Queue<Path> pending;
 	
 	/**
 	 * Create a new FileScanner beginning at root.
@@ -34,48 +35,55 @@ public class FileWalker implements AutoCloseable {
 	 */
 	public FileWalker(Path root) throws IOException {
 		this.root = root;
-		fileStream = Files.walk(this.root);
+		fileStream = Files.walk(this.root).filter(f -> Files.isRegularFile(f));
 		iterator = fileStream.iterator();
-		previous = null;
-		next = null;
+		pending = new LinkedList<Path>();
+		System.out.format("FileWalker opened to \"%s\".%n%n", root);
 	}
 	
 	/**
 	 * Advance to the next file.
 	 * 
-	 * @return Path to the next file or null if no next file.
+	 * @return Path to the next file.
 	 */
 	public Path next() {
-		previous = next;
-		next = (iterator.hasNext() ? iterator.next() : null);
+		Path p = (pending.size() > 0 ? pending.poll() : iterator.next());
+//		System.out.format("Reading file: \"%s\".%n", p.toString());
+		return p;
+	}
+	
+	/**
+	 * Peek the next file without consuming it completely. The file is removed from the
+	 * iterator but added to the pending queue. The next time next() is called, the
+	 * head of the pending queue is returned instead of advancing the iterator. The
+	 * iterator is only advanced once the queue is empty. This method may be called
+	 * multiple times. Each subsequent call will add another item to the queue.
+	 * 
+	 * @return Path to the next file added to the pending queue.
+	 */
+	public Path lookAhead() {
+		Path next = iterator.next();
+		pending.add(next);
 		return next;
 	}
 	
 	/**
-	 * Get the previous file.
+	 * Check if it's still possible to look ahead by seeing if the iterator has a next
+	 * element. The state of the pending queue is not considered.
 	 * 
-	 * @return Path to the previous file or null if no previous file.
+	 * @return True if the iterator has a next element.
 	 */
-	public Path previous() {
-		return previous;
+	public boolean hasLookAhead() {
+		return iterator.hasNext();
 	}
 	
 	/**
 	 * Check if the iterator has a next element.
 	 * 
-	 * @return True if the iterator has a next element.
+	 * @return True if the pending queue or iterator has a next element.
 	 */
 	public boolean hasNext() {
-		return iterator.hasNext();
-	}
-	
-	/**
-	 * Check if the walker has a previous element.
-	 * 
-	 * @return True if the walker has a previous element. 
-	 */
-	public boolean hasPrevious() {
-		return previous != null;
+		return pending.size() > 0 || iterator.hasNext();
 	}
 	
 	/**
@@ -99,6 +107,6 @@ public class FileWalker implements AutoCloseable {
 	@Override
 	public void close() {
 		fileStream.close();
-		System.out.println("FileScanner closed.");
+		System.out.format("%nFileWalker closed.%n%n");
 	}
 }

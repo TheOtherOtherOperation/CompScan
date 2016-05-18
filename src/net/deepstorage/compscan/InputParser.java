@@ -17,15 +17,11 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Queue;
 
-import net.deepstorage.compscan.CompScan.ScanMode;
-
 /**
  * @author user1
  *
  */
 public class InputParser {
-	// Expected number of arguments.
-	public static final int MIN_ARGS = 5;
 	// Positional arguments.
 	public static final String[] POSITIONAL_ARGS = {
 		"pathIn",
@@ -39,14 +35,13 @@ public class InputParser {
 	
 	private Map<String, Boolean> assigned;
 	
-	private int buffSize;
-	private int ioRate;
+	private double ioRate;
 	private Path pathIn;
 	private Path pathOut;
 	private int blockSize;
 	private int superblockSize;
 	private String formatString;
-	private ScanMode scanMode;
+	private int bufferSize;
 	private boolean overwriteOK;
 	private Compressor compressor;
 	
@@ -59,9 +54,8 @@ public class InputParser {
 		assigned = new HashMap<String, Boolean>();
 		
 		this.compScan = compScan;
-		scanMode = compScan.getScanMode();
-		buffSize = compScan.getBuffSize();
 		ioRate = compScan.getIORate();
+		bufferSize = CompScan.ONE_MB;
 		overwriteOK = false;
 		
 		for (String s : POSITIONAL_ARGS) {
@@ -79,11 +73,11 @@ public class InputParser {
 	 * @throws IllegalArgumentException if an argument is invalid or unrecognized.
 	 */
 	void parse(String[] args) throws IllegalArgumentException {
-		if (args.length < MIN_ARGS) {
+		if (args.length < POSITIONAL_ARGS.length) {
 			throw new IllegalArgumentException(
 					String.format(
 							"Invalid number of arguments -- %1$d given, %2$d expected.",
-							args.length, MIN_ARGS));
+							args.length, POSITIONAL_ARGS.length));
 		}
 		
 		ListIterator<String> it = Arrays.asList(args).listIterator();
@@ -97,18 +91,10 @@ public class InputParser {
 			}
 		}
 		
-		if (scanMode == ScanMode.FILE && !isVMDK(pathIn)) {
-			throw new IllegalArgumentException(
-					String.format(
-							"VMDK mode specified but \"%1$d\" does not appear to be a "
-							+ "valid .vhd, .vhdx, or .vmdk.",
-							pathIn));
-		}
-		
 		checkPositionals();
 		
-		compScan.setup(buffSize, ioRate, pathIn, pathOut, blockSize, superblockSize, scanMode,
-				       overwriteOK, formatString, compressor);
+		compScan.setup(ioRate, pathIn, pathOut, blockSize, superblockSize, bufferSize, overwriteOK,
+				compressor);
 		printConfig();
 	}
 	
@@ -181,7 +167,7 @@ public class InputParser {
 		// Compression format.
 		case "formatString":
 			formatString = arg;
-			compressor = new Compressor(buffSize, blockSize, superblockSize, formatString);
+			compressor = new Compressor(blockSize, superblockSize, formatString);
 			break;
 		// Default.
 		default:
@@ -206,14 +192,11 @@ public class InputParser {
 	 */
 	private void parseOptional(String arg, ListIterator<String> it) throws IllegalArgumentException {
 		switch (arg) {
+		// Help.
 		case "-h": case "--help":
 			CompScan.printHelp();
 			System.exit(0);
 		break;
-		// VMDK.
-		case "--vmdk":
-			scanMode = ScanMode.FILE;
-			break;
 		// IO rate.
 		case "--rate":
 			if (!it.hasNext()) {
@@ -221,33 +204,32 @@ public class InputParser {
 						"Reached end of arguments without finding value for rate.");
 			}
 			try {
-				ioRate = Integer.parseInt(it.next());
+				ioRate = Double.parseDouble(it.next());
 				if (ioRate < 0) {
 					throw new NumberFormatException();
 				}
 			} catch (NumberFormatException ex) {
 				throw new IllegalArgumentException(
 						String.format(
-								"Optional parameter rate requires nonnegative integer (default: %1$d = unlimited MB/sec).",
+								"Optional parameter rate requires nonnegative integer (default: %1$f = unlimited MB/sec).",
 								CompScan.UNLIMITED));
 			}
 			break;
-		// Buffer size.
+		// Input buffer size.
 		case "--buffer-size":
 			if (!it.hasNext()) {
 				throw new IllegalArgumentException(
 						"Reached end of arguments without finding value for buffer size.");
 			}
 			try {
-				buffSize = Integer.parseInt(it.next());
-				if (buffSize < 1) {
+				bufferSize = Integer.parseInt(it.next());
+				if (bufferSize < 1) {
 					throw new NumberFormatException();
 				}
 			} catch (NumberFormatException ex) {
 				throw new IllegalArgumentException(
 						String.format(
-								"Optional parameter buffer size requires nonnegative integer (default: %1$d bytes).",
-								CompScan.DEFAULT_BUFFSIZE));
+								"Optional parameter buffer size requires positive integer (default: %d bytes).", CompScan.ONE_MB));
 			}
 			break;
 		// Overwrite output.
@@ -286,22 +268,20 @@ public class InputParser {
 	private void printConfig() {
 		String setupString = String.format(
 				"Configuration:%n" +
-				"    - buffSize:          %1$d%n" +
-				"    - ioRate:            %2$s%n" +
-				"    - pathIn:            %3$s%n" +
-				"    - pathOut:           %4$s%n" +
-				"    - blockSize:         %5$s%n" +
-				"    - superblockSize:    %6$d%n" +
-				"    - scanMode:          %7$s%n" +
-				"    - overwriteOK:       %8$s%n" +
-				"    - formatString:      %9$s%n",
-				buffSize,
-				(ioRate == 0 ? "UNLIMITED" : Integer.toString(ioRate)),
+				"    - ioRate:            %1$s%n" +
+				"    - pathIn:            %2$s%n" +
+				"    - pathOut:           %3$s%n" +
+				"    - blockSize:         %4$s%n" +
+				"    - superblockSize:    %5$d%n" +
+				"    - bufferSize:        %6$d%n" +
+				"    - overwriteOK:       %7$s%n" +
+				"    - formatString:      %8$s%n",
+				(ioRate == CompScan.UNLIMITED ? "UNLIMITED" : Double.toString(ioRate)),
 				pathIn,
 				pathOut,
 				blockSize,
 				superblockSize,
-				scanMode.toString(),
+				bufferSize,
 				Boolean.toString(overwriteOK),
 				formatString
 				);
@@ -335,6 +315,7 @@ public class InputParser {
 			return false;
 		} else {
 			String[] partials = path.getFileName().toString().split("\\.(?=\\w+$)");
+			System.out.println(partials[1]);
 			// Short-circuits.
 			return (partials.length == 2
 					&& Arrays.asList(CompScan.VALID_EXTENSIONS).contains(partials[1].toLowerCase()));

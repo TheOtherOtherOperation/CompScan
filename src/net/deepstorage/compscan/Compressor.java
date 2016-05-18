@@ -20,7 +20,6 @@ import java.util.Set;
 public class Compressor {
 	private CompressionInterface compressionInterface;
 	private byte[] buffer;
-	private final int readBuffSize;
 	private final int blockSize;
 	private final int superblockSize;
 	private final String formatString;
@@ -34,21 +33,15 @@ public class Compressor {
 	/**
 	 * Instantiate a new Compressor.
 	 * 
-	 * @param readBuffSize Size of the input buffer in bytes.
 	 * @param blockSize The block size of the compression scheme in bytes.
 	 * @param superblockSize The superblock size of the compression scheme in bytes.
 	 * @param formatString The name of the compression scheme.
 	 * @throws IllegalArgumentException if buffSize, blockSize, or superblockSize are nonpositive, or if formatString is empty or null.
 	 */
-	protected Compressor(int readBuffSize, int blockSize, int superblockSize, String formatString) throws IllegalArgumentException {
-		if (readBuffSize < 1) {
-			throw new IllegalArgumentException("Buffer size must be a positive integer.");
-		}
-		this.readBuffSize = readBuffSize;
-		if (blockSize < 1 || blockSize >= readBuffSize) {
+	protected Compressor(int blockSize, int superblockSize, String formatString) throws IllegalArgumentException {
+		if (blockSize < 1 || blockSize >= superblockSize) {
 			throw new IllegalArgumentException(String.format(
-					"Block size (%d) must be a positive integer greater than or equal to read buffer size (%d).",
-					blockSize, readBuffSize));
+					"Block size (%d) must be a positive integer.", blockSize));
 		}
 		this.blockSize = blockSize;
 		if (superblockSize < 1 || superblockSize % blockSize != 0) {
@@ -118,16 +111,7 @@ public class Compressor {
 	 * 
 	 * @return Size of the internal buffer in bytes.
 	 */
-	public int getReadBufferSize() {
-		return readBuffSize;
-	}
-	
-	/**
-	 * Getter for the data buffer size.
-	 * 
-	 * @return Size of the data buffer in bytes.
-	 */
-	public int getDataBufferSize() {
+	public int getBufferSize() {
 		return buffer.length;
 	}
 	
@@ -169,7 +153,7 @@ public class Compressor {
 		if (data.length != buffer.length) {
 			throw new BufferLengthException(
 					String.format(
-							"Compressor.feedData requires exactly one superblock of data: $1%d bytes given, $2%d bytes expected.",
+							"Compressor.feedData requires exactly one superblock of data: %1$d bytes given, %2$d bytes expected.",
 							data.length, buffer.length));
 		}
 		

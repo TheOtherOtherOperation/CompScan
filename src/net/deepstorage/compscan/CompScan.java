@@ -7,7 +7,6 @@
  */
 package net.deepstorage.compscan;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,12 +15,13 @@ import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
+
+import net.deepstorage.compscan.Compressor.BufferLengthException;
 
 /**
  * CompScan's main class.
@@ -32,29 +32,27 @@ import java.util.stream.Stream;
 public class CompScan {
 	// Valid file extensions.
 	public static final String[] VALID_EXTENSIONS = {
-			".vhd",
-			".vhdx",
-			".vmdk"
+			"vhd",
+			"vhdx",
+			"vmdk"
 	};
-	// Default buffer size: 1MB.
-	public static final int DEFAULT_BUFFSIZE = 1000000;
 	// Symbolic constant representing unthrottled IO rate.
-	public static final int UNLIMITED = 0;
+	public static final double UNLIMITED = 0.0;
 	// Subpackage prefix for the compression package.
 	public static final String COMPRESSION_SUBPACKAGE = "compress";
+	// Symbolic constant for 1 million bytes (1 MB), the default input buffer size.
+	public static final int ONE_MB = 1_000_000;
 	
 	private boolean setupLock;
 	private Date date;
 	
-	private int buffSize;
-	private int ioRate;
+	private double ioRate;
 	private Path pathIn;
 	private Path pathOut;
 	private int blockSize;
 	private int superblockSize;
-	private ScanMode scanMode;
+	private int bufferSize;
 	private boolean overwriteOK;
-	private String formatString;
 	private Compressor compressor;
 	
 	/**
@@ -65,9 +63,8 @@ public class CompScan {
 	private CompScan(String[] args) throws IllegalArgumentException {
 		setupLock = false;
 		date = Calendar.getInstance().getTime();
-		scanMode = ScanMode.DIRECTORY;
-		buffSize = DEFAULT_BUFFSIZE;
 		ioRate = UNLIMITED;
+		bufferSize = ONE_MB;
 		overwriteOK = false;
 		InputParser ip = new InputParser(this);
 		ip.parse(args);
@@ -76,32 +73,28 @@ public class CompScan {
 	/**
 	 * Allows other package members, notably the InputParser, to set fields. Deliberately package-private.
 	 * 
-	 * @param buffSize Input buffer size.
 	 * @param ioRate IOPS limit.
 	 * @param pathIn Input path.
 	 * @param pathOut Output path.
 	 * @param blockSize Block size in bytes.
 	 * @param superblockSize Superblock size in bytes.
-	 * @param scanMode Whether to scan a single VMDK or a directory.
+	 * @param bufferSize Size of the internal read buffer.
 	 * @param overwriteOK Whether it's allowed to overwrite the output file.
-	 * @param formatString Name of the compression scheme to use.
 	 * @param compressor Compressor associated with formatString.
 	 * @throws Exception if called more than once.
 	 */
-	void setup(int buffSize, int ioRate, Path pathIn, Path pathOut, int blockSize,int superblockSize,
-			ScanMode scanMode, boolean overwriteOK, String formatString, Compressor compressor) {
+	void setup(double ioRate, Path pathIn, Path pathOut, int blockSize, int superblockSize,
+			int bufferSize, boolean overwriteOK, Compressor compressor) {
 		if (setupLock) {
 			System.err.println("CompScan.setup cannot be called more than once.");
 			System.exit(1);
 		}
-		this.buffSize = buffSize;
 		this.ioRate = ioRate;
 		this.pathIn = pathIn;
 		this.pathOut = pathOut;
 		this.blockSize = blockSize;
 		this.superblockSize = superblockSize;
-		this.formatString = formatString;
-		this.scanMode = scanMode;
+		this.bufferSize = bufferSize;
 		this.overwriteOK = overwriteOK;
 		this.compressor = compressor;
 		setupLock = true;
@@ -113,15 +106,33 @@ public class CompScan {
 	 * @return Results object containing the test results.
 	 */
 	private Results run() {
+		System.out.format("Starting run.%n%n");
+
 		Results results = new Results(pathOut.getFileName().toString(), date);
 		results.set("block size", blockSize);
 		results.set("superblock size", superblockSize);
 		
+		ConsoleDisplayThread cdt = new ConsoleDisplayThread(results);
+
 		try {
-			// TODO
+			FileScanner fc = new FileScanner(pathIn, bufferSize, ioRate, compressor, results);
+			cdt.start();
+			fc.scan();
 		} catch (IOException e) {
-			System.err.println("A filesystem IO error ocurred.");
+			System.err.format("A filesystem IO error ocurred.%n%n");
+			e.printStackTrace();
 			System.exit(1);
+		} catch (BufferLengthException e) {
+			System.err.format("The input buffer is the wrong size.%n%n");
+			e.printStackTrace();
+			System.exit(1);
+		}
+		
+		cdt.interrupt();
+		try {
+			cdt.join();
+		} catch (InterruptedException e) {
+			// Nothing to do.
 		}
 		
 		return results;
@@ -156,29 +167,11 @@ public class CompScan {
 	}
 	
 	/**
-	 * Getter for scanMode.
-	 * 
-	 * @return The ScanMode.
-	 */
-	public ScanMode getScanMode() {
-		return scanMode;
-	}
-	
-	/**
-	 * Getter for buffSize.
-	 * 
-	 * @return The read buffer size in bytes.
-	 */
-	public int getBuffSize() {
-		return buffSize;
-	}
-	
-	/**
 	 * Getter for ioRate.
 	 * 
 	 * @return The IOPS limit (0 = UNLIMITED).
 	 */
-	public int getIORate() {
+	public double getIORate() {
 		return ioRate;
 	}
 	
@@ -189,8 +182,8 @@ public class CompScan {
 	 */
 	public static void printHelp(String custom) {
 		System.out.format(
-				"Usage: CompScan [-h] [--help] [--overwrite] [--vmdk] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
-				+ "pathIn pathOut name blockSize superblockSize format%n"
+				"Usage: CompScan [-h] [--help] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
+			    + "                pathIn pathOut name blockSize superblockSize format%n"
 				+ "Positional Arguments%n"
 			    + "         pathIn            path to the dataset%n"
 				+ "         pathOut           where to save the output%n"
@@ -200,9 +193,8 @@ public class CompScan {
 			    + "Optional Arguments%n"
 				+ "         -h, --help        print this help message%n"
 			    + "         --overwrite       whether overwriting the output file is allowed%n"
-				+ "         --vmdk            flag to enable per-VMDK reporting instead of aggregate%n"
 				+ "         --rate MB_PER_SEC maximum MB/sec we're allowed to read%n"
-				+ "         --buffer-size BUFFER_SIZE     set the read buffer size in bytes%n"
+			    + "         --buffer-size BUFFER_SIZE size of the internal read buffer%n"
 			    );
 		// Short-circuits.
 		if (custom != null && custom.length() > 0) {
@@ -248,17 +240,11 @@ public class CompScan {
 	}
 	
 	/**
-	 * A nested enum for symbolic constants to indicate single-file or directory mode.
-	 */
-	public static enum ScanMode {
-		FILE, DIRECTORY;
-	}
-	
-	/**
 	 * A simple subclass for encapsulating test results.
 	 */
-	private class Results {
+	public class Results {
 		private final String[] KEYS = {
+				"files read",
 				"block size",
 				"superblock size",
 				"bytes read",
@@ -301,17 +287,90 @@ public class CompScan {
 			map.put(k, v);
 		}
 		
+		/**
+		 * Get the value for a given map key.
+		 * 
+		 * @param k Map key to retrieve.
+		 * @return Value assigned to the key.
+		 */
+		public long get(String k) {
+			if (!map.containsKey(k)) {
+				throw new IllegalArgumentException("Invalid key \"" + k + "\".");
+			}
+			return map.get(k);
+		}
+		
+		/**
+		 * Feed a CompressionInfo object into the Results to update the counters.
+		 * 
+		 * @param ci CompressionInfo whose data should be added to the results.
+		 */
+		public void feedCompressionInfo(Compressor.CompressionInfo ci) {
+			addTo("bytes read", ci.bytesRead);
+			addTo("blocks read", ci.blocksRead);
+			addTo("superblocks read", ci.superblocksRead);
+			addTo("compressed bytes", ci.compressedBytes);
+			addTo("compressed blocks", ci.compressedBlocks);
+			addTo("actual bytes needed", ci.actualBytes);
+		}
+		
+		/**
+		 * Get the raw compression factor.
+		 * 
+		 * @return Compressed bytes / bytes read.
+		 */
+		public double getRawCompressionFactor() {
+			long bytesRead = map.get("bytes read");
+			if (bytesRead == 0) {
+				return 0;
+			}
+			return (double) map.get("compressed bytes") / (double) bytesRead;
+		}
+		
+		/**
+		 * Get the superblock compression factor.
+		 * 
+		 * @return Actual bytes needed / bytes read.
+		 */
+		public double getSuperblockCompressionFactor() {
+			long bytesRead = map.get("bytes read");
+			if (bytesRead == 0) {
+				return 0;
+			}
+			return (double) map.get("actual bytes needed") / (double) bytesRead;
+		}
+		
 		@Override
 		public String toString() {
-			List<String> lines = 
-					map.entrySet()
+			List<String> headings = new LinkedList<>(map.keySet());
+			List<String> values = new LinkedList<>(
+					map.values()
 					.stream()
-					.map(e -> String.format("%1$s,%2$d", e.getKey(), e.getValue()))
-					.collect(Collectors.toList());
-			lines.add(0, "name," + name);
-			lines.add(1, "timestamp," + timestamp);
-			String s = String.format(String.join("%n", lines));
-			return s;
+					.map(v -> String.valueOf(v))
+					.collect(Collectors.toList()));
+			headings.add(0, "name");
+			values.add(0, name);
+			headings.add(1, "timestamp");
+			values.add(1, timestamp);
+			headings.add("raw compression factor");
+			values.add(String.valueOf(getRawCompressionFactor()));
+			headings.add("superblock compression factor");
+			values.add(String.valueOf(getSuperblockCompressionFactor()));
+			
+			String headerString = String.join(",", headings);
+			String valueString = String.join(",", values);
+			
+			return headerString + System.lineSeparator() + valueString;
+		}
+		
+		/**
+		 * Add a value to one one of the map values.
+		 * 
+		 * @param k Map key to add to.
+		 * @param v Value to add to the map value for k.
+		 */
+		private void addTo(String k, long v) {
+			map.put(k, map.get(k) + v);
 		}
 	}
 }
