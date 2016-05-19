@@ -17,6 +17,8 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Queue;
 
+import net.deepstorage.compscan.CompScan.ScanMode;
+
 /**
  * @author user1
  *
@@ -38,6 +40,7 @@ public class InputParser {
 	private double ioRate;
 	private Path pathIn;
 	private Path pathOut;
+	private ScanMode scanMode;
 	private int blockSize;
 	private int superblockSize;
 	private String formatString;
@@ -54,6 +57,7 @@ public class InputParser {
 		assigned = new HashMap<String, Boolean>();
 		
 		this.compScan = compScan;
+		scanMode = ScanMode.NORMAL;
 		ioRate = compScan.getIORate();
 		bufferSize = CompScan.ONE_MB;
 		overwriteOK = false;
@@ -93,7 +97,7 @@ public class InputParser {
 		
 		checkPositionals();
 		
-		compScan.setup(ioRate, pathIn, pathOut, blockSize, superblockSize, bufferSize, overwriteOK,
+		compScan.setup(ioRate, pathIn, pathOut, scanMode, blockSize, superblockSize, bufferSize, overwriteOK,
 				compressor);
 		printConfig();
 	}
@@ -197,6 +201,9 @@ public class InputParser {
 			CompScan.printHelp();
 			System.exit(0);
 		break;
+		case "--vmdk":
+			scanMode = ScanMode.VMDK;
+			break;
 		// IO rate.
 		case "--rate":
 			if (!it.hasNext()) {
@@ -271,14 +278,16 @@ public class InputParser {
 				"    - ioRate:            %1$s%n" +
 				"    - pathIn:            %2$s%n" +
 				"    - pathOut:           %3$s%n" +
-				"    - blockSize:         %4$s%n" +
-				"    - superblockSize:    %5$d%n" +
-				"    - bufferSize:        %6$d%n" +
-				"    - overwriteOK:       %7$s%n" +
-				"    - formatString:      %8$s%n",
+				"    - scanMode:          %4$s%n" +
+				"    - blockSize:         %5$s%n" +
+				"    - superblockSize:    %6$d%n" +
+				"    - bufferSize:        %7$d%n" +
+				"    - overwriteOK:       %8$s%n" +
+				"    - formatString:      %9$s%n",
 				(ioRate == CompScan.UNLIMITED ? "UNLIMITED" : Double.toString(ioRate)),
 				pathIn,
 				pathOut,
+				scanMode.toString(),
 				blockSize,
 				superblockSize,
 				bufferSize,
@@ -297,28 +306,8 @@ public class InputParser {
 	private static Boolean isValidPath(Path path) {
 		if (path == null) {
 			return false;
-		} else if (Files.isDirectory(path)) {
-			return true;
 		} else {
-			return isVMDK(path);
-		}
-	}
-	
-	/**
-	 * Check if path is a valid virtual disk file.
-	 * 
-	 * @param path Path to verify.
-	 * @return True if path is a valid virtual disk file.
-	 */
-	private static Boolean isVMDK(Path path) {
-		if (path == null) {
-			return false;
-		} else {
-			String[] partials = path.getFileName().toString().split("\\.(?=\\w+$)");
-			System.out.println(partials[1]);
-			// Short-circuits.
-			return (partials.length == 2
-					&& Arrays.asList(CompScan.VALID_EXTENSIONS).contains(partials[1].toLowerCase()));
+			return Files.exists(path);
 		}
 	}
 }

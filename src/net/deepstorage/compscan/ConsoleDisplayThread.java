@@ -59,8 +59,10 @@ public class ConsoleDisplayThread extends Thread {
 	 * Print a progress line.
 	 */
 	private void printProgress() {
-		String s = String.format("Elapsed time: %1$d sec    Files read: %2$d    Megabytes read: %3$d",
-				elapsedTime / 1000, results.get("files read"), results.get("bytes read")/CompScan.ONE_MB);
+		String s = String.format("Elapsed time: %1$d sec    Files read: %2$d    Megabytes read: %3$.2f",
+				elapsedTime / 1000,
+				results.get("files read"),
+				((float) results.get("bytes read"))/((float) CompScan.ONE_MB));
 		lastString = s;
 		System.out.print(s);
 	}

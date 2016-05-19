@@ -10,13 +10,16 @@ package net.deepstorage.compscan;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.stream.Stream;
 
+import net.deepstorage.compscan.CompScan.ScanMode;
+
 /**
- * A filesystem scanner for CompScan.
+ * A filesystem walker for CompScan.
  * 
  * @author Ramon A. Lovato
  * @version 1.0
@@ -26,6 +29,7 @@ public class FileWalker implements AutoCloseable {
 	private Stream<Path> fileStream;
 	private Iterator<Path> iterator;
 	private Queue<Path> pending;
+	private long filesAccessed;
 	
 	/**
 	 * Create a new FileScanner beginning at root.
@@ -34,11 +38,30 @@ public class FileWalker implements AutoCloseable {
 	 * @throws IOException if the file stream couldn't be opened.
 	 */
 	public FileWalker(Path root) throws IOException {
+		this(root, ScanMode.NORMAL);
+	}
+	
+	/**
+	 * Create a new FileScanner beginning at root with file extension white-listing.
+	 * 
+	 * @param root Path to the root of the datastore to scan.
+	 * @param scanMode The ScanMode to use. If NORMAL, the resulting file stream will
+	 *                 contain all regular files. IF VMDK, the file stream will contain
+	 *                 only those files whose extensions are in CompScan.VALID_EXTENSIONS.
+	 * @throws IOException if the file stream couldn't be opened.
+	 */
+	public FileWalker(Path root, ScanMode scanMode) throws IOException {
 		this.root = root;
-		fileStream = Files.walk(this.root).filter(f -> Files.isRegularFile(f));
+		
+		if (scanMode == ScanMode.VMDK) {
+			fileStream = Files.walk(this.root).filter(f -> isVMDK(f));
+		} else {
+			fileStream = Files.walk(this.root).filter(f -> Files.isRegularFile(f));
+		}
+		
 		iterator = fileStream.iterator();
 		pending = new LinkedList<Path>();
-		System.out.format("FileWalker opened to \"%s\".%n%n", root);
+		filesAccessed = 0;
 	}
 	
 	/**
@@ -48,7 +71,7 @@ public class FileWalker implements AutoCloseable {
 	 */
 	public Path next() {
 		Path p = (pending.size() > 0 ? pending.poll() : iterator.next());
-//		System.out.format("Reading file: \"%s\".%n", p.toString());
+		filesAccessed++;
 		return p;
 	}
 	
@@ -83,7 +106,7 @@ public class FileWalker implements AutoCloseable {
 	 * @return True if the pending queue or iterator has a next element.
 	 */
 	public boolean hasNext() {
-		return pending.size() > 0 || iterator.hasNext();
+		return iterator.hasNext() || pending.size() > 0;
 	}
 	
 	/**
@@ -103,10 +126,40 @@ public class FileWalker implements AutoCloseable {
 	public Path getRoot() {
 		return root;
 	}
+	
+	/**
+	 * Get the number of files accessed.
+	 * 
+	 * @return The number of files accessed via next().
+	 */
+	public long getFilesAccessed() {
+		return filesAccessed;
+	}
 
 	@Override
 	public void close() {
 		fileStream.close();
-		System.out.format("%nFileWalker closed.%n%n");
+	}
+	
+	/**
+	 * Check if path is a valid virtual disk file.
+	 * 
+	 * @param path Path to verify.
+	 * @return True if path is a valid virtual disk file.
+	 */
+	private static Boolean isVMDK(Path path) {
+		if (path == null) {
+			return false;
+		} else {
+			String[] partials = path.getFileName().toString().split("\\.(?=\\w+$)");
+			if (partials.length < 2) {
+				return false;
+			}
+			System.out.println(partials[1]);
+			// Short-circuits.
+			return (Files.isRegularFile(path)
+					&& partials.length == 2
+					&& Arrays.asList(CompScan.VALID_EXTENSIONS).contains(partials[1].toLowerCase()));
+		}
 	}
 }

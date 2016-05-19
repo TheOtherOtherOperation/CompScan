@@ -22,6 +22,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import net.deepstorage.compscan.Compressor.BufferLengthException;
+import net.deepstorage.compscan.Compressor.CompressionInfo;
+import net.deepstorage.compscan.FileScanner.NoNextFileException;
 
 /**
  * CompScan's main class.
@@ -32,6 +34,7 @@ import net.deepstorage.compscan.Compressor.BufferLengthException;
 public class CompScan {
 	// Valid file extensions.
 	public static final String[] VALID_EXTENSIONS = {
+			"txt",
 			"vhd",
 			"vhdx",
 			"vmdk"
@@ -43,12 +46,14 @@ public class CompScan {
 	// Symbolic constant for 1 million bytes (1 MB), the default input buffer size.
 	public static final int ONE_MB = 1_000_000;
 	
+	private final Date date;
+	
 	private boolean setupLock;
-	private Date date;
 	
 	private double ioRate;
 	private Path pathIn;
 	private Path pathOut;
+	private ScanMode scanMode;
 	private int blockSize;
 	private int superblockSize;
 	private int bufferSize;
@@ -61,11 +66,18 @@ public class CompScan {
 	 * @param args CLI arguments.
 	 */
 	private CompScan(String[] args) throws IllegalArgumentException {
-		setupLock = false;
-		date = Calendar.getInstance().getTime();
 		ioRate = UNLIMITED;
+		pathIn = null;
+		pathOut = null;
+		scanMode = ScanMode.NORMAL;
+		blockSize = 0;
+		superblockSize = 0;
 		bufferSize = ONE_MB;
 		overwriteOK = false;
+		compressor = null;
+		
+		setupLock = false;
+		date = Calendar.getInstance().getTime();
 		InputParser ip = new InputParser(this);
 		ip.parse(args);
 	}
@@ -76,6 +88,7 @@ public class CompScan {
 	 * @param ioRate IOPS limit.
 	 * @param pathIn Input path.
 	 * @param pathOut Output path.
+	 * @param scanMode ScanMode to use.
 	 * @param blockSize Block size in bytes.
 	 * @param superblockSize Superblock size in bytes.
 	 * @param bufferSize Size of the internal read buffer.
@@ -83,7 +96,7 @@ public class CompScan {
 	 * @param compressor Compressor associated with formatString.
 	 * @throws Exception if called more than once.
 	 */
-	void setup(double ioRate, Path pathIn, Path pathOut, int blockSize, int superblockSize,
+	void setup(double ioRate, Path pathIn, Path pathOut, ScanMode scanMode, int blockSize, int superblockSize,
 			int bufferSize, boolean overwriteOK, Compressor compressor) {
 		if (setupLock) {
 			System.err.println("CompScan.setup cannot be called more than once.");
@@ -92,6 +105,7 @@ public class CompScan {
 		this.ioRate = ioRate;
 		this.pathIn = pathIn;
 		this.pathOut = pathOut;
+		this.scanMode = scanMode;
 		this.blockSize = blockSize;
 		this.superblockSize = superblockSize;
 		this.bufferSize = bufferSize;
@@ -102,10 +116,8 @@ public class CompScan {
 	
 	/**
 	 * Run scan.
-	 * 
-	 * @return Results object containing the test results.
 	 */
-	private Results run() {
+	private void run() {
 		System.out.format("Starting run.%n%n");
 
 		Results results = new Results(pathOut.getFileName().toString(), date);
@@ -115,9 +127,9 @@ public class CompScan {
 		ConsoleDisplayThread cdt = new ConsoleDisplayThread(results);
 
 		try {
-			FileScanner fc = new FileScanner(pathIn, bufferSize, ioRate, compressor, results);
+			FileScanner fs = new FileScanner(pathIn, bufferSize, ioRate, compressor, results);
 			cdt.start();
-			fc.scan();
+			fs.scan();
 		} catch (IOException e) {
 			System.err.format("A filesystem IO error ocurred.%n%n");
 			e.printStackTrace();
@@ -125,6 +137,9 @@ public class CompScan {
 		} catch (BufferLengthException e) {
 			System.err.format("The input buffer is the wrong size.%n%n");
 			e.printStackTrace();
+			System.exit(1);
+		} catch (NoNextFileException e) {
+			System.err.println(e.getMessage());
 			System.exit(1);
 		}
 		
@@ -135,17 +150,101 @@ public class CompScan {
 			// Nothing to do.
 		}
 		
-		return results;
+		// Save results.
+		try {
+			String pathOut = writeResults(results.toString());
+			System.out.println(
+					String.format(
+							"%n--> Output saved as \"%s\".%n", pathOut));
+		} catch (IOException e) {
+			System.err.println("Unable to save output.");
+			e.printStackTrace();
+		} finally {
+			System.out.println(results.toString());
+		}
+	}
+	
+	/**
+	 * Run VMDK-mode scan.
+	 */
+	private void runVMDKMode() {
+		System.out.format("Starting run.%n%n");
+		
+		Results totals = new Results(pathOut.getFileName().toString(), date);
+		totals.set("block size", blockSize);
+		totals.set("superblock size", superblockSize);
+		
+		List<Results> allResults = new LinkedList<>();
+		
+		ConsoleDisplayThread cdt = new ConsoleDisplayThread(totals);
+		
+		try {
+			FileScanner fs = new FileScanner(pathIn, bufferSize, ioRate, compressor, totals);
+			cdt.start();
+			fs.scanVMDKMode(allResults, totals);
+		} catch (IOException e) {
+			System.err.format("A filesystem IO error ocurred.%n%n");
+			e.printStackTrace();
+			System.exit(1);
+		} catch (BufferLengthException e) {
+			System.err.format("The input buffer is the wrong size.%n%n");
+			e.printStackTrace();
+			System.exit(1);
+		} catch (NoNextFileException e) {
+			System.err.println(e.getMessage());
+			System.exit(1);
+		}
+		
+		cdt.interrupt();
+		try {
+			cdt.join();
+		} catch (InterruptedException e) {
+			// Nothing to do.
+		}
+		
+		// Save results.
+		String resultString = makeVMDKResultString(allResults, totals);
+		try {
+			String pathOut = writeResults(resultString);
+			System.out.println(
+					String.format(
+							"%n--> Output saved as \"%s\".%n", pathOut));
+		} catch (IOException e) {
+			System.err.println("Unable to save output.");
+			e.printStackTrace();
+		} finally {
+			System.out.println(resultString);
+		}
+	}
+	
+	/**
+	 * Convert VMDK scan results into a string for saving to the output CSV.
+	 * 
+	 * @param allResults List of Results objects containing the intermediate results.
+	 * @param totals Results object containing the aggregate results.
+	 */
+	public String makeVMDKResultString(List<Results> allResults, Results totals) {
+		List<String> lines = new LinkedList<>();
+		lines.add(totals.makeHeadingString());
+		lines.addAll(
+				allResults.stream()
+				.map(r -> r.makeValueString())
+				.collect(Collectors.toList()));
+		lines.add("");
+		lines.add("--- Totals ---");
+		lines.add(totals.makeValueString());
+		
+		return String.join(System.lineSeparator(), lines);
 	}
 	
 	/**
 	 * Save the results to a CSV file.
 	 * 
-	 * @param results Results to save.
+	 * @param resultString Results string to save.
 	 * @return The actual path where the file was saved. Might not be the same as pathOut if pathOut already exists.
 	 * @throws IOException if an IO error occurred.
 	 */
-	public String writeResults(Results results) throws IOException {
+	public String writeResults(String resultString) throws IOException {
 		Path writePath = pathOut;
 		if (Files.exists(writePath) && !overwriteOK) {
 			int i = 0;
@@ -159,7 +258,7 @@ public class CompScan {
 		}
 		
 		try (BufferedWriter bw = Files.newBufferedWriter(writePath)) {
-			bw.write(results.toString());
+			bw.write(resultString);
 		} catch (IOException e) {
 			throw e;
 		}
@@ -182,7 +281,7 @@ public class CompScan {
 	 */
 	public static void printHelp(String custom) {
 		System.out.format(
-				"Usage: CompScan [-h] [--help] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
+				"Usage: CompScan [-h] [--help] [--vmdk] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
 			    + "                pathIn pathOut name blockSize superblockSize format%n"
 				+ "Positional Arguments%n"
 			    + "         pathIn            path to the dataset%n"
@@ -192,6 +291,7 @@ public class CompScan {
 				+ "         formatString      compression format to use%n"
 			    + "Optional Arguments%n"
 				+ "         -h, --help        print this help message%n"
+			    + "         --vmdk            whether to report individual virtual disks separately%n"
 			    + "         --overwrite       whether overwriting the output file is allowed%n"
 				+ "         --rate MB_PER_SEC maximum MB/sec we're allowed to read%n"
 			    + "         --buffer-size BUFFER_SIZE size of the internal read buffer%n"
@@ -225,24 +325,24 @@ public class CompScan {
 			System.exit(1);
 		}
 		
-		Results results = cs.run();
-		try {
-			String pathOut = cs.writeResults(results);
-			System.out.println(
-					String.format(
-							"Output saved as \"%s\".%n", pathOut));
-		} catch (IOException e) {
-			System.err.println("Unable to save output.");
-			e.printStackTrace();
-		} finally {
-			System.out.println(results.toString());
+		if (cs.scanMode == ScanMode.VMDK) {
+			cs.runVMDKMode();
+		} else {
+			cs.run();
 		}
+	}
+	
+	/**
+	 * Nested enumeration for tracking the scan mode.
+	 */
+	public static enum ScanMode {
+		NORMAL, VMDK;
 	}
 	
 	/**
 	 * A simple subclass for encapsulating test results.
 	 */
-	public class Results {
+	public static class Results {
 		private final String[] KEYS = {
 				"files read",
 				"block size",
@@ -254,19 +354,30 @@ public class CompScan {
 				"compressed blocks",
 				"actual bytes needed"
 		};
+		private final String name;
+		private final String timestamp;
 		private Map<String, Long> map;
-		private String name;
-		private String timestamp;
+		
+		/**
+		 * Convenience constructor for creating a new Results object from a name
+		 * and Date object.
+		 * 
+		 * @param name Name to assign to the resulting data set.
+		 * @param date Date object from which to generate the timestamp.
+		 */
+		public Results(String name, Date date) {
+			this(name, new SimpleDateFormat("MM/dd/yyyy KK:mm:ss a Z").format(date));			
+		}
 		
 		/**
 		 * Create a new Results object.
 		 * 
 		 * @param name Name to assign to the resulting data set.
-		 * @param date Date object from which to generate the timestamp.
+		 * @param timestamp Formatted timestamp string to use.
 		 */
-		private Results(String name, Date date) {
+		public Results(String name, String timestamp) {
 			this.name = name;
-			this.timestamp = new SimpleDateFormat("MM/dd/yyyy KK:mm:ss a Z").format(date);
+			this.timestamp = timestamp;
 			// Uses a LinkedHashMap to preserve insertion order.
 			map = new LinkedHashMap<>();
 			for (String s : KEYS) {
@@ -301,17 +412,39 @@ public class CompScan {
 		}
 		
 		/**
+		 * Get the timestamp.
+		 * 
+		 * @return A formatted timestamp string.
+		 */
+		public String getDate() {
+			return timestamp;
+		}
+		
+		/**
 		 * Feed a CompressionInfo object into the Results to update the counters.
 		 * 
 		 * @param ci CompressionInfo whose data should be added to the results.
 		 */
-		public void feedCompressionInfo(Compressor.CompressionInfo ci) {
+		public void feedCompressionInfo(CompressionInfo ci) {
 			addTo("bytes read", ci.bytesRead);
 			addTo("blocks read", ci.blocksRead);
 			addTo("superblocks read", ci.superblocksRead);
 			addTo("compressed bytes", ci.compressedBytes);
 			addTo("compressed blocks", ci.compressedBlocks);
 			addTo("actual bytes needed", ci.actualBytes);
+		}
+		
+		/**
+		 * Feed another Results object into the Results to update the counters.
+		 */
+		public void feedOtherResults(Results r) {
+			addTo("files read", r.get("files read"));
+			addTo("bytes read", r.get("bytes read"));
+			addTo("blocks read", r.get("blocks read"));
+			addTo("superblocks read", r.get("superblocks read"));
+			addTo("compressed bytes", r.get("compressed bytes"));
+			addTo("compressed blocks", r.get("compressed blocks"));
+			addTo("actual bytes needed", r.get("actual bytes needed"));
 		}
 		
 		/**
@@ -322,9 +455,9 @@ public class CompScan {
 		public double getRawCompressionFactor() {
 			long bytesRead = map.get("bytes read");
 			if (bytesRead == 0) {
-				return 0;
+				return 0.0;
 			}
-			return (double) map.get("compressed bytes") / (double) bytesRead;
+			return ((double) map.get("compressed bytes")) / ((double) bytesRead);
 		}
 		
 		/**
@@ -335,32 +468,46 @@ public class CompScan {
 		public double getSuperblockCompressionFactor() {
 			long bytesRead = map.get("bytes read");
 			if (bytesRead == 0) {
-				return 0;
+				return 0.0;
 			}
-			return (double) map.get("actual bytes needed") / (double) bytesRead;
+			return ((double) map.get("actual bytes needed")) / ((double) bytesRead);
 		}
 		
-		@Override
-		public String toString() {
+		/**
+		 * Generate a heading string.
+		 * 
+		 * @return A CSV-formatted heading string from the map keys.
+		 */
+		public String makeHeadingString() {
 			List<String> headings = new LinkedList<>(map.keySet());
+			headings.add(0, "name");
+			headings.add(1, "timestamp");
+			headings.add("raw compression factor");
+			headings.add("superblock compression factor");
+			return String.join(",",  headings);
+		}
+		
+		/**
+		 * Generate a value string.
+		 * 
+		 * @return A CSV-formatted value string from the map values.
+		 */
+		public String makeValueString() {
 			List<String> values = new LinkedList<>(
 					map.values()
 					.stream()
 					.map(v -> String.valueOf(v))
 					.collect(Collectors.toList()));
-			headings.add(0, "name");
 			values.add(0, name);
-			headings.add(1, "timestamp");
 			values.add(1, timestamp);
-			headings.add("raw compression factor");
 			values.add(String.valueOf(getRawCompressionFactor()));
-			headings.add("superblock compression factor");
 			values.add(String.valueOf(getSuperblockCompressionFactor()));
-			
-			String headerString = String.join(",", headings);
-			String valueString = String.join(",", values);
-			
-			return headerString + System.lineSeparator() + valueString;
+			return String.join(",",  values);
+		}
+		
+		@Override
+		public String toString() {			
+			return makeHeadingString() + System.lineSeparator() + makeValueString();
 		}
 		
 		/**
@@ -371,6 +518,15 @@ public class CompScan {
 		 */
 		private void addTo(String k, long v) {
 			map.put(k, map.get(k) + v);
+		}
+
+		/**
+		 * Getter for the timestamp string.
+		 * 
+		 * @return The timestamp string.
+		 */
+		public String getTimestamp() {
+			return timestamp;
 		}
 	}
 }

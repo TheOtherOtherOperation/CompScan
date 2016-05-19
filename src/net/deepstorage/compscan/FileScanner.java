@@ -3,13 +3,15 @@
  */
 package net.deepstorage.compscan;
 
-import java.io.BufferedInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 
+import net.deepstorage.compscan.CompScan.Results;
+import net.deepstorage.compscan.CompScan.ScanMode;
 import net.deepstorage.compscan.Compressor.BufferLengthException;
+import net.deepstorage.compscan.Compressor.CompressionInfo;
 
 /**
  * The FileScanner class abstracts the necessary behavior for walking a file tree.
@@ -19,11 +21,11 @@ import net.deepstorage.compscan.Compressor.BufferLengthException;
  */
 public class FileScanner {
 	private Path root;
-	private byte[] buffer;
+	private int bufferSize;
 	private Compressor compressor;
-	private CompScan.Results results;
+	private Results results;
 	private int superblockSize;
-	private int delayMS;
+	private double ioRate;
 	
 	/**
 	 * Constructor.
@@ -34,39 +36,70 @@ public class FileScanner {
 	 * @param compressor Compressor to use.
 	 * @param results Results object to update with the scan data.
 	 */
-	public FileScanner(Path root, int bufferSize, double ioRate, Compressor compressor, CompScan.Results results) {
+	public FileScanner(Path root, int bufferSize, double ioRate, Compressor compressor, Results results) {
 		this.root = root;
-		buffer = new byte[bufferSize];
+		this.bufferSize = bufferSize;
+		
 		this.compressor = compressor;
 		this.results = results;
 		superblockSize = compressor.getSuperblockSize();
 		
-		if (ioRate == CompScan.UNLIMITED) {
-			delayMS = 0;
+		int remainder = bufferSize % superblockSize;
+		if (remainder != 0) {
+			this.bufferSize = bufferSize + superblockSize - remainder;
+			System.out.format("Read buffer size adjusted to %s bytes to be an even multiple of superblock size.%n%n",
+					          this.bufferSize);
 		} else {
-			double buffsPerSec = (CompScan.ONE_MB / bufferSize) * ioRate;
-			delayMS = (int) (1000.0 / buffsPerSec);
+			this.bufferSize = bufferSize;
 		}
 		
-		clearBuffer();
+		this.ioRate = ioRate;
 	}
 	
 	/**
-	 * Run scan of the appropriate mode.
+	 * Run scan.
 	 * 
 	 * @throws IOException if an IO error occurs.
 	 * @throws BufferLengthException if the buffer is the wrong size.
+	 * @throws NoNextFileException if file root contains no regular files.
 	 */
-	public void scan() throws IOException, BufferLengthException {
-		try (FileWalker walker = new FileWalker(root)) {
-			if (!walker.hasNext()) {
-				throw new IOException(
+	public void scan() throws IOException, BufferLengthException, NoNextFileException {
+		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(root), bufferSize, ioRate)) {
+			if (!fws.hasMore()) {
+				throw new NoNextFileException(
 						String.format(
-								"FileWalker root \"%s\" contains no regular files.", root));
+								"FileWalkerStream with root \"%s\" contains no scannable data.", root));
 			}
-			while (walker.hasNext()) {
-				Path current = walker.next();
-				scanFile(current, walker);
+			scanStream(fws, results);
+		} catch (IOException ex) {
+			throw ex;
+		}
+	}
+	
+	/**
+	 * Run scan in VMDK mode.
+	 * 
+	 * @param fileResults List of Results in which to store the new scan results.
+	 * @param totals Results object to update with totals data.
+	 * @throws IOException if an IO error occurs.
+	 * @throws BufferLengthException if the buffer is the wrong size.
+	 * @throws NoNextFileException if the file root contains no VMDKs.
+	 */
+	public void scanVMDKMode(List<Results> fileResults, Results totals) throws IOException, BufferLengthException, NoNextFileException {
+		try (FileWalker fw = new FileWalker(root, ScanMode.VMDK)) {
+			if (!fw.hasNext()) {
+				throw new NoNextFileException(
+						String.format(
+								"FileWalker opened in VMDK mode with root \"%s\" but contains no VMDKs.", root));
+			}
+			
+			while (fw.hasNext()) {
+				Path f = fw.next();
+				Results r = new Results(f.toString(), results.getTimestamp());
+				FileWalkerStream fws = new FileWalkerStream(new FileWalker(f, ScanMode.NORMAL), bufferSize, ioRate);
+				scanStream(fws, r);
+				fileResults.add(r);
+				totals.feedOtherResults(r);
 			}
 		} catch (IOException ex) {
 			throw ex;
@@ -74,91 +107,33 @@ public class FileScanner {
 	}
 	
 	/**
-	 * A helper function that reads bytes from a BufferedInputStream into a buffer and throttles
-	 * the read rate if appropriate.
-	 * @throws IOException 
-	 */
-	private int readThrottled(BufferedInputStream bs, byte[] buffer, int start, int end) throws IOException {
-		long initial = System.currentTimeMillis();
-		int bytesRead = bs.read(buffer, start, end);
-		long elapsed = System.currentTimeMillis() - initial;
-		// This will always be false if there's no limit, since delayMS will be 0.
-		if (elapsed < delayMS) {
-			try {
-				Thread.sleep(delayMS-elapsed);
-			} catch (InterruptedException e) {
-				// Do nothing, since we don't really care if it's interrupted.
-			}
-		}
-		return bytesRead;
-	}
-	
-	/**
-	 * Scan files.
+	 * Scan a FileWalkerStream.
 	 * 
-	 * @param p Primary file to scan.
-	 * @param w FileWalker for walking the directory.
-	 * @throws IOException if file access failed.
+	 * @param fws FileWalkerStream from which to pull scan data.
+	 * @param r Results object to update with the scan data.
+	 * @throws IOException if an IO error occurs.
 	 * @throws BufferLengthException if the buffer is the wrong size.
 	 */
-	private void scanFile(Path p, FileWalker w) throws IOException, BufferLengthException {
-		if (p == null) {
-			return;
-		}
-		
-		System.out.println("before1");
-		BufferedInputStream bs = new BufferedInputStream(Files.newInputStream(p), buffer.length);
-		while (bs.available() > 0) {
-			int bytesRead = readThrottled(bs, buffer, 0, buffer.length);
-			
-			while (bytesRead < buffer.length) {
-				if (w.hasLookAhead()) {
-					BufferedInputStream bs2 = new BufferedInputStream(Files.newInputStream(w.lookAhead()));
-					bytesRead += readThrottled(bs2, buffer, bytesRead, buffer.length - bytesRead);
-					bs2.close();
-				} else {
-					clearBuffer(bytesRead, buffer.length);
-					break;
-				}
-			}
-			
-			for (int i = 0; i < buffer.length; i += superblockSize) {
-				byte[] segment = Arrays.copyOfRange(buffer, i, i + superblockSize);
-				Compressor.CompressionInfo info = compressor.feedData(segment);
-				results.feedCompressionInfo(info);
+	private void scanStream(FileWalkerStream fws, Results r) throws IOException, BufferLengthException {
+		while (fws.hasMore()) {
+			byte[] buffer = fws.getBytes();
+			// Since the read buffer is enforced to be an even multiple of the superblock size, we
+			// can use a simple iteration to feed the data to the compressor.
+			for (int i = 0, j = superblockSize; j <= buffer.length; i += superblockSize, j += superblockSize) {
+				byte[] segment = Arrays.copyOfRange(buffer, i, j);
+				CompressionInfo ci = compressor.feedData(segment);
+				r.feedCompressionInfo(ci);
+				r.set("files read", fws.getFilesRead());
 			}
 		}
-		System.out.println("after1");
-		
-		bs.close();
-		results.set("files read", results.get("files read") + 1);
 	}
 	
 	/**
-	 * Clear the entire read buffer.
+	 * A custom exception for handling no next file.
 	 */
-	private void clearBuffer() {
-		clearBuffer(0, buffer.length);
-	}
-	
-	/**
-	 * Clear part of the read buffer.
-	 * 
-	 * @param start Index from which to start clearing.
-	 * @param end Maximum index for clearing. End itself is not cleared.
-	 */
-	private void clearBuffer(int start, int end) {
-		if (end < start) {
-			return;
-		}
-		if (start < 0) {
-			start = 0;
-		}
-		if (end > buffer.length) {
-			end = buffer.length;
-		}
-		for (int i = start; i < end; i++) {
-			buffer[i] = 0x0;
+	public static class NoNextFileException extends Exception {
+		public NoNextFileException(String message) {
+			super(message);
 		}
 	}
 	
