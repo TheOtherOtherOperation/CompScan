@@ -28,7 +28,7 @@ public class FileWalkerStream implements AutoCloseable {
 	 * 
 	 * @param walker The FileWalker that backs this stream.
 	 * @param bufferSize Size of the internal read buffer.
-	 * @param ioRate 
+	 * @param ioRate Maximum MB/sec we're allowed to perform.
 	 * @throws IOException if the underlying reader failed.
 	 */
 	public FileWalkerStream(FileWalker walker, int bufferSize, double ioRate) throws IOException {

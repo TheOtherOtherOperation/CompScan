@@ -3,7 +3,9 @@
  */
 package net.deepstorage.compscan;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -23,7 +25,7 @@ public class FileScanner {
 	private Path root;
 	private int bufferSize;
 	private Compressor compressor;
-	private Results results;
+	private Results totals;
 	private int superblockSize;
 	private double ioRate;
 	
@@ -41,7 +43,7 @@ public class FileScanner {
 		this.bufferSize = bufferSize;
 		
 		this.compressor = compressor;
-		this.results = results;
+		this.totals = results;
 		superblockSize = compressor.getSuperblockSize();
 		
 		int remainder = bufferSize % superblockSize;
@@ -70,37 +72,7 @@ public class FileScanner {
 						String.format(
 								"FileWalkerStream with root \"%s\" contains no scannable data.", root));
 			}
-			scanStream(fws, results);
-		} catch (IOException ex) {
-			throw ex;
-		}
-	}
-	
-	/**
-	 * Run scan in VMDK mode.
-	 * 
-	 * @param fileResults List of Results in which to store the new scan results.
-	 * @param totals Results object to update with totals data.
-	 * @throws IOException if an IO error occurs.
-	 * @throws BufferLengthException if the buffer is the wrong size.
-	 * @throws NoNextFileException if the file root contains no VMDKs.
-	 */
-	public void scanVMDKMode(List<Results> fileResults, Results totals) throws IOException, BufferLengthException, NoNextFileException {
-		try (FileWalker fw = new FileWalker(root, ScanMode.VMDK)) {
-			if (!fw.hasNext()) {
-				throw new NoNextFileException(
-						String.format(
-								"FileWalker opened in VMDK mode with root \"%s\" but contains no VMDKs.", root));
-			}
-			
-			while (fw.hasNext()) {
-				Path f = fw.next();
-				Results r = new Results(f.toString(), results.getTimestamp());
-				FileWalkerStream fws = new FileWalkerStream(new FileWalker(f, ScanMode.NORMAL), bufferSize, ioRate);
-				scanStream(fws, r);
-				fileResults.add(r);
-				totals.feedOtherResults(r);
-			}
+			scanStream(fws, totals);
 		} catch (IOException ex) {
 			throw ex;
 		}
@@ -117,15 +89,113 @@ public class FileScanner {
 	private void scanStream(FileWalkerStream fws, Results r) throws IOException, BufferLengthException {
 		while (fws.hasMore()) {
 			byte[] buffer = fws.getBytes();
-			// Since the read buffer is enforced to be an even multiple of the superblock size, we
-			// can use a simple iteration to feed the data to the compressor.
-			for (int i = 0, j = superblockSize; j <= buffer.length; i += superblockSize, j += superblockSize) {
-				byte[] segment = Arrays.copyOfRange(buffer, i, j);
-				CompressionInfo ci = compressor.feedData(segment);
-				r.feedCompressionInfo(ci);
-				r.set("files read", fws.getFilesRead());
-			}
+			scanBuffer(buffer, r);
+			r.set("files read", fws.getFilesRead());
 		}
+	}
+	
+	/**
+	 * Run scan in VMDK mode.
+	 * 
+	 * @param fileResults List of Results in which to store the new scan results.
+	 * @throws IOException if an IO error occurs.
+	 * @throws BufferLengthException if the buffer is the wrong size.
+	 * @throws NoNextFileException if the file root contains no VMDKs.
+	 */
+	public void scanVMDKMode(List<Results> fileResults) throws IOException, BufferLengthException, NoNextFileException {
+		try (FileWalker fw = new FileWalker(root, ScanMode.VMDK)) {
+			if (!fw.hasNext()) {
+				throw new NoNextFileException(
+						String.format(
+								"FileWalker opened in VMDK mode with root \"%s\" but contains no VMDKs.", root));
+			}
+			
+			while (fw.hasNext()) {
+				Path f = fw.next();
+				Results r = new Results(f.toString(), totals.getTimestamp());
+				scanFile(f, r);
+				fileResults.add(r);
+			}
+		} catch (IOException ex) {
+			throw ex;
+		}
+	}
+	
+	/**
+	 * Scan a single file.
+	 * 
+	 * @param f Path to the file to scan.
+	 * @param r Results object to update with the scan data.
+	 * @throws IOException if an IO error occurs.
+	 * @throws BufferLengthException if the buffer is the wrong size.
+	 */
+	private void scanFile(Path f, Results r) throws IOException, BufferLengthException {
+		if (f == null || r == null) {
+			return;
+		}
+		
+		BufferedInputStream bis = new BufferedInputStream(Files.newInputStream(f), bufferSize);
+		byte[] buffer = new byte[bufferSize];
+		
+		totals.incrementFilesRead();
+		
+		int bytesRead = 0;
+		
+		while (bis.available() > 0) {
+			bytesRead = bis.read(buffer);
+			// Nothing left to read. Abort.
+			if (bytesRead <= 0) {
+				break;
+			// Zero out rest of buffer if necessary.
+			} else if (bytesRead < bufferSize) {
+				for (int i = bytesRead; i < buffer.length; i++) {
+					buffer[i] = 0x0;
+				}
+			}
+			Results intermediate = new Results(f.toString(), r.getTimestamp());
+			scanBuffer(buffer, intermediate);
+			r.feedOtherResults(intermediate);
+			totals.feedOtherResults(intermediate);
+		};
+	}
+	
+	/**
+	 * Scan a data buffer by splitting it into superblocks. The buffer size is automatically rounded up
+	 * to the next even multiple of the superblock size, making this easy.
+	 * 
+	 * @param b Data buffer to scan. Must have length == bufferSize.
+	 * @param r Results object to update with scan results.
+	 * @throws BufferLengthException if the buffers are the wrong size.
+	 */
+	private void scanBuffer(byte[] b, Results r) throws BufferLengthException {
+		if (b.length != bufferSize) {
+			throw new BufferLengthException(
+					String.format(
+							"Input buffer size is %1$d but data buffer provided is size %2$d.",
+							bufferSize, b.length));
+		}
+		for (int i = 0, j = superblockSize; j <= b.length; i += superblockSize, j += superblockSize) {
+			byte[] segment = Arrays.copyOfRange(b, i, j);
+			scanSuperblock(segment, r);
+		}
+	}
+	
+	/**
+	 * Scan a single superblock of data.
+	 * 
+	 * @param segment Data buffer to scan. Must be one superblock in length.
+	 * @param r Results object to update with scan results.
+	 * @throws BufferLengthException if the buffers are the wrong size.
+	 */
+	private void scanSuperblock(byte[] segment, Results r) throws BufferLengthException {
+		if (segment.length != superblockSize) {
+			throw new BufferLengthException(
+					String.format(
+							"Superblock size is %1$d but data buffer provided is size %2$d.",
+							superblockSize, segment.length));
+		}
+		CompressionInfo ci = compressor.feedData(segment);
+		r.feedCompressionInfo(ci);
 	}
 	
 	/**

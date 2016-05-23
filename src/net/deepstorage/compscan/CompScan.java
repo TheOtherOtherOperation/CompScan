@@ -181,7 +181,7 @@ public class CompScan {
 		try {
 			FileScanner fs = new FileScanner(pathIn, bufferSize, ioRate, compressor, totals);
 			cdt.start();
-			fs.scanVMDKMode(allResults, totals);
+			fs.scanVMDKMode(allResults);
 		} catch (IOException e) {
 			System.err.format("A filesystem IO error ocurred.%n%n");
 			e.printStackTrace();
@@ -445,6 +445,13 @@ public class CompScan {
 			addTo("compressed bytes", r.get("compressed bytes"));
 			addTo("compressed blocks", r.get("compressed blocks"));
 			addTo("actual bytes needed", r.get("actual bytes needed"));
+		}
+		
+		/**
+		 * Increment the files read counter.
+		 */
+		public void incrementFilesRead() {
+			set("files read", get("files read") + 1);
 		}
 		
 		/**

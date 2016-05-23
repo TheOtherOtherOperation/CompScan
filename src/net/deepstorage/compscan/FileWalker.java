@@ -155,7 +155,6 @@ public class FileWalker implements AutoCloseable {
 			if (partials.length < 2) {
 				return false;
 			}
-			System.out.println(partials[1]);
 			// Short-circuits.
 			return (Files.isRegularFile(path)
 					&& partials.length == 2
