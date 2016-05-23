@@ -3,9 +3,7 @@
  */
 package net.deepstorage.compscan;
 
-import java.io.BufferedInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -66,7 +64,7 @@ public class FileScanner {
 	 * @throws NoNextFileException if file root contains no regular files.
 	 */
 	public void scan() throws IOException, BufferLengthException, NoNextFileException {
-		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(root), bufferSize, ioRate)) {
+		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(root), bufferSize, ioRate, false)) {
 			if (!fws.hasMore()) {
 				throw new NoNextFileException(
 						String.format(
@@ -134,29 +132,68 @@ public class FileScanner {
 			return;
 		}
 		
-		BufferedInputStream bis = new BufferedInputStream(Files.newInputStream(f), bufferSize);
-		byte[] buffer = new byte[bufferSize];
-		
 		totals.incrementFilesRead();
 		
-		int bytesRead = 0;
-		
-		while (bis.available() > 0) {
-			bytesRead = bis.read(buffer);
-			// Nothing left to read. Abort.
-			if (bytesRead <= 0) {
-				break;
-			// Zero out rest of buffer if necessary.
-			} else if (bytesRead < bufferSize) {
-				for (int i = bytesRead; i < buffer.length; i++) {
-					buffer[i] = 0x0;
-				}
+		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(f), bufferSize, ioRate, true)) {
+			byte[] buffer = new byte[bufferSize];
+			while (fws.hasMore()) {
+				buffer = fws.getBytes();
+				Results intermediate = new Results(f.toString(), r.getTimestamp());
+				scanBuffer(buffer, intermediate);
+				r.feedOtherResults(intermediate);
+				totals.feedOtherResults(intermediate);
 			}
-			Results intermediate = new Results(f.toString(), r.getTimestamp());
-			scanBuffer(buffer, intermediate);
-			r.feedOtherResults(intermediate);
-			totals.feedOtherResults(intermediate);
-		};
+		}
+		
+//		BufferedInputStream bis = new BufferedInputStream(Files.newInputStream(f), bufferSize);
+//		byte[] buffer = new byte[bufferSize];
+//		
+//		totals.incrementFilesRead();
+//		
+//		int delayMS;
+//		if (ioRate == CompScan.UNLIMITED) {
+//			delayMS = 0;
+//		} else {
+//			double buffsPerSec = (CompScan.ONE_MB / bufferSize) * ioRate;
+//			delayMS = (int) (1000.0 / buffsPerSec);
+//		}
+//		
+//		int bytesRead = 0;
+//		
+//		while (bis.available() > 0) {
+//			long start = System.currentTimeMillis();
+//			
+//			bytesRead = bis.read(buffer);
+//			
+//			long end = System.currentTimeMillis();
+//			long elapsed = end - start;
+//			
+//			// Nothing left to read. Abort.
+//			if (bytesRead <= 0) {
+//				break;
+//			// Zero out rest of buffer if necessary.
+//			} else if (bytesRead < bufferSize) {
+//				for (int i = bytesRead; i < buffer.length; i++) {
+//					buffer[i] = 0x0;
+//				}
+//			}
+//			Results intermediate = new Results(f.toString(), r.getTimestamp());
+//			scanBuffer(buffer, intermediate);
+//			r.feedOtherResults(intermediate);
+//			totals.feedOtherResults(intermediate);
+//			
+//			// Throttle if necessary.
+//			if (elapsed < delayMS) {
+//				try {
+//					Thread.sleep(delayMS - elapsed);
+//				} catch (InterruptedException e) {
+//					// Ignore, since there's not really anything we can do if the OS wakes the thread up
+//					// prematurely.
+//				}
+//			}
+//		}
+//		
+//		bis.close();
 	}
 	
 	/**

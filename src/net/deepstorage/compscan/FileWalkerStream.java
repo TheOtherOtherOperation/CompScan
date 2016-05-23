@@ -22,6 +22,7 @@ public class FileWalkerStream implements AutoCloseable {
 	private final int bufferSize;
 	private BufferedInputStream bs;
 	private int delayMS;
+	private boolean noStep;
 	
 	/**
 	 * Constructor.
@@ -29,9 +30,10 @@ public class FileWalkerStream implements AutoCloseable {
 	 * @param walker The FileWalker that backs this stream.
 	 * @param bufferSize Size of the internal read buffer.
 	 * @param ioRate Maximum MB/sec we're allowed to perform.
+	 * @param noStep Prohibit stepping to the next file (single-file-only mode).
 	 * @throws IOException if the underlying reader failed.
 	 */
-	public FileWalkerStream(FileWalker walker, int bufferSize, double ioRate) throws IOException {
+	public FileWalkerStream(FileWalker walker, int bufferSize, double ioRate, boolean noStep) throws IOException {
 		this.walker = walker;
 		this.bufferSize = bufferSize;
 		bs = null;
@@ -41,7 +43,10 @@ public class FileWalkerStream implements AutoCloseable {
 			double buffsPerSec = (CompScan.ONE_MB / bufferSize) * ioRate;
 			delayMS = (int) (1000.0 / buffsPerSec);
 		}
+		// Forcibly set this.noStep to false so we can get the first file.
+		this.noStep = false;
 		step();
+		this.noStep = noStep;
 	}
 	
 	/**
@@ -160,7 +165,7 @@ public class FileWalkerStream implements AutoCloseable {
 		if (bs != null) {
 			bs.close();
 		}
-		if (walker.hasNext()) {
+		if (walker.hasNext() && !noStep) {
 			bs = new BufferedInputStream(Files.newInputStream(walker.next()), bufferSize);
 		} else {
 			bs = null;
