@@ -282,7 +282,7 @@ public class CompScan {
 	public static void printHelp(String custom) {
 		System.out.format(
 				"Usage: CompScan [-h] [--help] [--vmdk] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
-			    + "                pathIn pathOut name blockSize superblockSize format%n"
+			    + "                pathIn pathOut blockSize superblockSize format%n"
 				+ "Positional Arguments%n"
 			    + "         pathIn            path to the dataset%n"
 				+ "         pathOut           where to save the output%n"
