@@ -11,14 +11,16 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import net.deepstorage.compscan.Compressor.BufferLengthException;
@@ -59,6 +61,7 @@ public class CompScan {
 	private int bufferSize;
 	private boolean overwriteOK;
 	private Compressor compressor;
+	private boolean printHashes;
 	
 	/**
 	 * Default constructor.
@@ -75,6 +78,7 @@ public class CompScan {
 		bufferSize = ONE_MB;
 		overwriteOK = false;
 		compressor = null;
+		printHashes = false;
 		
 		setupLock = false;
 		date = Calendar.getInstance().getTime();
@@ -94,10 +98,11 @@ public class CompScan {
 	 * @param bufferSize Size of the internal read buffer.
 	 * @param overwriteOK Whether it's allowed to overwrite the output file.
 	 * @param compressor Compressor associated with formatString.
+	 * @param printHashes Whether or not to print the hash table.
 	 * @throws Exception if called more than once.
 	 */
 	void setup(double ioRate, Path pathIn, Path pathOut, ScanMode scanMode, int blockSize, int superblockSize,
-			int bufferSize, boolean overwriteOK, Compressor compressor) {
+			int bufferSize, boolean overwriteOK, Compressor compressor, boolean printHashes) {
 		if (setupLock) {
 			System.err.println("CompScan.setup cannot be called more than once.");
 			System.exit(1);
@@ -111,6 +116,7 @@ public class CompScan {
 		this.bufferSize = bufferSize;
 		this.overwriteOK = overwriteOK;
 		this.compressor = compressor;
+		this.printHashes = printHashes;
 		setupLock = true;
 	}
 	
@@ -127,9 +133,12 @@ public class CompScan {
 		ConsoleDisplayThread cdt = new ConsoleDisplayThread(results);
 
 		try {
-			FileScanner fs = new FileScanner(pathIn, bufferSize, ioRate, compressor, results);
+			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, results);
 			cdt.start();
 			fs.scan();
+			if (printHashes) {
+				results.printHashes();
+			}
 		} catch (IOException e) {
 			System.err.format("A filesystem IO error ocurred.%n%n");
 			e.printStackTrace();
@@ -152,10 +161,11 @@ public class CompScan {
 		
 		// Save results.
 		try {
-			String pathOut = writeResults(results.toString());
+			writeResults("totals.csv", results.toString(), overwriteOK);
+			writeResults("hashes.csv", results.makeHashCounterString(), overwriteOK);
 			System.out.println(
 					String.format(
-							"%n--> Output saved as \"%s\".%n", pathOut));
+							"%n--> Output saved in \"%s\".%n", pathOut));
 		} catch (IOException e) {
 			System.err.println("Unable to save output.");
 			e.printStackTrace();
@@ -179,9 +189,9 @@ public class CompScan {
 		ConsoleDisplayThread cdt = new ConsoleDisplayThread(totals);
 		
 		try {
-			FileScanner fs = new FileScanner(pathIn, bufferSize, ioRate, compressor, totals);
+			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, totals);
 			cdt.start();
-			fs.scanVMDKMode(allResults);
+			fs.scanVMDKMode(allResults, this, printHashes);
 		} catch (IOException e) {
 			System.err.format("A filesystem IO error ocurred.%n%n");
 			e.printStackTrace();
@@ -205,10 +215,11 @@ public class CompScan {
 		// Save results.
 		String resultString = makeVMDKResultString(allResults, totals);
 		try {
-			String pathOut = writeResults(resultString);
+			writeResults("totals.csv", resultString, overwriteOK);
 			System.out.println(
 					String.format(
-							"%n--> Output saved as \"%s\".%n", pathOut));
+							"%n--> Output saved in \"%s\".%n", pathOut));
+			// Hash results are saved incrementally in VMDK mode, so don't need to do anything here.
 		} catch (IOException e) {
 			System.err.println("Unable to save output.");
 			e.printStackTrace();
@@ -240,20 +251,22 @@ public class CompScan {
 	/**
 	 * Save the results to a CSV file.
 	 * 
+	 * @param name Filename.
 	 * @param resultString Results string to save.
 	 * @return The actual path where the file was saved. Might not be the same as pathOut if pathOut already exists.
 	 * @throws IOException if an IO error occurred.
 	 */
-	public String writeResults(String resultString) throws IOException {
-		Path writePath = pathOut;
+	public String writeResults(String name, String resultString, boolean overwriteOK) throws IOException {
+		Path writePath = pathOut.resolve(name);
 		if (Files.exists(writePath) && !overwriteOK) {
 			int i = 0;
-			String[] partials = writePath.toString().split("\\.(?=\\w+$)");
+			String[] partials = name.split("\\.(?=\\w+$)");
 			while (Files.exists(writePath)) {
+				i++;
 				String pathString = (partials.length < 2 ?
-						String.format("%1$s (%2$d).%3$s", partials[0], ++i, partials[1]) :
-						String.format("%1$s %2$d", partials[0]));
-				writePath = Paths.get(pathString);
+						String.format("%1$s (%2$d).%3$s", partials[0], i, partials[1]) :
+							String.format("%1$s %2$d", partials[0], i));
+				writePath = pathOut.resolve(pathString);
 			}
 		}
 		
@@ -263,6 +276,18 @@ public class CompScan {
 			throw e;
 		}
 		return writePath.toString();
+	}
+	
+	/**
+	 * Write the hash results to a file.
+	 * 
+	 * @param r Results object containing the hash counter map.
+	 * @param p Where to save the output file.
+	 * @return Where the file was saved.
+	 * @throws IOException
+	 */
+	public String writeHashResults(Results r, Path p) throws IOException {
+		return writeResults(p.getFileName() + ".hash.csv", r.makeHashCounterString(), overwriteOK);
 	}
 	
 	/**
@@ -295,6 +320,7 @@ public class CompScan {
 			    + "         --overwrite       whether overwriting the output file is allowed%n"
 				+ "         --rate MB_PER_SEC maximum MB/sec we're allowed to read%n"
 			    + "         --buffer-size BUFFER_SIZE size of the internal read buffer%n"
+				+ "         --hashes          print the hash table before exiting; the hashes are never saved to disk%n"
 			    );
 		// Short-circuits.
 		if (custom != null && custom.length() > 0) {
@@ -357,6 +383,7 @@ public class CompScan {
 		private final String name;
 		private final String timestamp;
 		private Map<String, Long> map;
+		private Map<String, Long> hashes;
 		
 		/**
 		 * Convenience constructor for creating a new Results object from a name
@@ -383,6 +410,7 @@ public class CompScan {
 			for (String s : KEYS) {
 				map.put(s, 0L);
 			}
+			hashes = new HashMap<>();
 		}
 		
 		/**
@@ -421,6 +449,43 @@ public class CompScan {
 		}
 		
 		/**
+		 * Increase the hash counter for the specified hash. If the hash is not
+		 * already in the hashes map, it gets added first.
+		 * 
+		 * @param hash Sha-1 hash to update.
+		 * @param count Number to add to the hash counter.
+		 */
+		public void updateHash(String hash, long count) {
+			if (!hashes.containsKey(hash)) {
+				hashes.put(hash, count);
+			} else {
+				hashes.put(hash, hashes.get(hash) + count);
+			}
+		}
+		
+		/**
+		 * Run updateHash on all entries in the specified map.
+		 * 
+		 * @param h Map<String, Long> containing counters for hash occurrences.
+		 */
+		public void updateHashes(Map<String, Long> h) {
+			if (h == null) {
+				return;
+			}
+			for (Map.Entry<String, Long> e : h.entrySet()) {
+				updateHash(e.getKey(), e.getValue());
+			}
+		}
+		
+		/**
+		 * Allows releasing resources for the hash counters.
+		 */
+		public void releaseHashes() {
+			hashes.clear();
+			System.gc();
+		}
+		
+		/**
 		 * Feed a CompressionInfo object into the Results to update the counters.
 		 * 
 		 * @param ci CompressionInfo whose data should be added to the results.
@@ -432,12 +497,25 @@ public class CompScan {
 			addTo("compressed bytes", ci.compressedBytes);
 			addTo("compressed blocks", ci.compressedBlocks);
 			addTo("actual bytes needed", ci.actualBytes);
+			updateHashes(ci.getHashes());
 		}
 		
 		/**
 		 * Feed another Results object into the Results to update the counters.
+		 * 
+		 * @param r Results object from which to update.
 		 */
 		public void feedOtherResults(Results r) {
+			feedOtherResults(r, r.hashes);
+		}
+		
+		/**
+		 * Feed another Results object into the Results to update the counters.
+		 * 
+		 * @param r Results object from which to update.
+		 * @param h Hashes map from which to update hashes.
+		 */
+		public void feedOtherResults(Results r, Map<String, Long> h) {
 			addTo("files read", r.get("files read"));
 			addTo("bytes read", r.get("bytes read"));
 			addTo("blocks read", r.get("blocks read"));
@@ -445,6 +523,9 @@ public class CompScan {
 			addTo("compressed bytes", r.get("compressed bytes"));
 			addTo("compressed blocks", r.get("compressed blocks"));
 			addTo("actual bytes needed", r.get("actual bytes needed"));
+			if (h != null) {
+				updateHashes(h);
+			}
 		}
 		
 		/**
@@ -512,6 +593,47 @@ public class CompScan {
 			return String.join(",",  values);
 		}
 		
+		/**
+		 * Generate a string for the hash counters.
+		 * 
+		 * @return A CSV-formatted string for the hash counters.
+		 */
+		public String makeHashCounterString() {			
+			Map<Long, Long> counters = getHashCounters();
+			
+			List<String> lines = new LinkedList<String>();
+			
+			lines.add("number of blocks,number of repeats");
+			lines.addAll(counters.entrySet()
+					.stream()
+					// Since the counters are returned as a mapping of no. of repeats --> no. of blocks, we need
+					// to print the values before the keys.
+					.map(e -> String.format("%d,%d", e.getValue(), e.getKey()))
+					.collect(Collectors.toList()));
+			
+			return String.join(System.lineSeparator(), lines);
+		}
+		
+		/**
+		 * Get the hash counts.
+		 * 
+		 * @return Map<Long, Long> in which the key represents the number of repeats and the value
+		 * 		   represents the number of blocks that repeat that number of times.
+		 */
+		public Map<Long, Long> getHashCounters() {
+			Map<Long, Long> counters = new TreeMap<Long, Long>();
+			
+			for (Iterator<Map.Entry<String, Long>> it = hashes.entrySet().iterator(); it.hasNext(); ) {
+				Map.Entry<String, Long> current = it.next();
+				long key = current.getValue();
+				long value = (counters.containsKey(key) ? counters.get(key) + 1L : 1L);
+				
+				counters.put(key, value);
+			}
+			
+			return counters;
+		}
+		
 		@Override
 		public String toString() {			
 			return makeHeadingString() + System.lineSeparator() + makeValueString();
@@ -534,6 +656,27 @@ public class CompScan {
 		 */
 		public String getTimestamp() {
 			return timestamp;
+		}
+		
+		/**
+		 * Getter for the hash counters map.
+		 * 
+		 * @return The hash counters map.
+		 */
+		public Map<String, Long> getHashes() {
+			return hashes;
+		}
+		
+		/**
+		 * Debugging method for printing the hash counters map.
+		 */
+		public void printHashes() {
+			System.out.println(
+					String.join(System.lineSeparator(),
+							hashes.entrySet()
+							.stream()
+							.map(x -> String.format("%1$s -> %2$d", x.getKey(), x.getValue()))
+							.collect(Collectors.toList())));
 		}
 	}
 }

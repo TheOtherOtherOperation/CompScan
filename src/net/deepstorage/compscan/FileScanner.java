@@ -21,6 +21,7 @@ import net.deepstorage.compscan.Compressor.CompressionInfo;
  */
 public class FileScanner {
 	private Path root;
+	private int blockSize;
 	private int bufferSize;
 	private Compressor compressor;
 	private Results totals;
@@ -36,8 +37,9 @@ public class FileScanner {
 	 * @param compressor Compressor to use.
 	 * @param results Results object to update with the scan data.
 	 */
-	public FileScanner(Path root, int bufferSize, double ioRate, Compressor compressor, Results results) {
+	public FileScanner(Path root, int blockSize, int bufferSize, double ioRate, Compressor compressor, Results results) {
 		this.root = root;
+		this.blockSize = blockSize;
 		this.bufferSize = bufferSize;
 		
 		this.compressor = compressor;
@@ -64,7 +66,7 @@ public class FileScanner {
 	 * @throws NoNextFileException if file root contains no regular files.
 	 */
 	public void scan() throws IOException, BufferLengthException, NoNextFileException {
-		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(root), bufferSize, ioRate, false)) {
+		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(root), blockSize, bufferSize, ioRate, false)) {
 			if (!fws.hasMore()) {
 				throw new NoNextFileException(
 						String.format(
@@ -95,12 +97,17 @@ public class FileScanner {
 	/**
 	 * Run scan in VMDK mode.
 	 * 
+	 * To reduce the memory footprint, this mode saves results data to disk after each file.
+	 * 
 	 * @param fileResults List of Results in which to store the new scan results.
+	 * @param cs CompScan responsible for saving results.
+	 * @param printHashes Whether or not to print the hash table for each VMDK.
 	 * @throws IOException if an IO error occurs.
 	 * @throws BufferLengthException if the buffer is the wrong size.
 	 * @throws NoNextFileException if the file root contains no VMDKs.
 	 */
-	public void scanVMDKMode(List<Results> fileResults) throws IOException, BufferLengthException, NoNextFileException {
+	public void scanVMDKMode(List<Results> fileResults, CompScan cs, boolean printHashes)
+			throws IOException, BufferLengthException, NoNextFileException {
 		try (FileWalker fw = new FileWalker(root, ScanMode.VMDK)) {
 			if (!fw.hasNext()) {
 				throw new NoNextFileException(
@@ -111,7 +118,17 @@ public class FileScanner {
 			while (fw.hasNext()) {
 				Path f = fw.next();
 				Results r = new Results(f.toString(), totals.getTimestamp());
+				r.set("block size", totals.get("block size"));
+				r.set("superblock size", totals.get("superblock size"));
 				scanFile(f, r);
+				r.set("files read", 1L);
+				
+				cs.writeHashResults(r, f);
+				if (printHashes) {
+					r.printHashes();
+				}
+				r.releaseHashes();
+				
 				fileResults.add(r);
 			}
 		} catch (IOException ex) {
@@ -134,66 +151,16 @@ public class FileScanner {
 		
 		totals.incrementFilesRead();
 		
-		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(f), bufferSize, ioRate, true)) {
+		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(f), blockSize, bufferSize, ioRate, true)) {
 			byte[] buffer = new byte[bufferSize];
 			while (fws.hasMore()) {
 				buffer = fws.getBytes();
 				Results intermediate = new Results(f.toString(), r.getTimestamp());
 				scanBuffer(buffer, intermediate);
-				r.feedOtherResults(intermediate);
-				totals.feedOtherResults(intermediate);
+				r.feedOtherResults(intermediate, intermediate.getHashes());
+				totals.feedOtherResults(intermediate, null);
 			}
 		}
-		
-//		BufferedInputStream bis = new BufferedInputStream(Files.newInputStream(f), bufferSize);
-//		byte[] buffer = new byte[bufferSize];
-//		
-//		totals.incrementFilesRead();
-//		
-//		int delayMS;
-//		if (ioRate == CompScan.UNLIMITED) {
-//			delayMS = 0;
-//		} else {
-//			double buffsPerSec = (CompScan.ONE_MB / bufferSize) * ioRate;
-//			delayMS = (int) (1000.0 / buffsPerSec);
-//		}
-//		
-//		int bytesRead = 0;
-//		
-//		while (bis.available() > 0) {
-//			long start = System.currentTimeMillis();
-//			
-//			bytesRead = bis.read(buffer);
-//			
-//			long end = System.currentTimeMillis();
-//			long elapsed = end - start;
-//			
-//			// Nothing left to read. Abort.
-//			if (bytesRead <= 0) {
-//				break;
-//			// Zero out rest of buffer if necessary.
-//			} else if (bytesRead < bufferSize) {
-//				for (int i = bytesRead; i < buffer.length; i++) {
-//					buffer[i] = 0x0;
-//				}
-//			}
-//			Results intermediate = new Results(f.toString(), r.getTimestamp());
-//			scanBuffer(buffer, intermediate);
-//			r.feedOtherResults(intermediate);
-//			totals.feedOtherResults(intermediate);
-//			
-//			// Throttle if necessary.
-//			if (elapsed < delayMS) {
-//				try {
-//					Thread.sleep(delayMS - elapsed);
-//				} catch (InterruptedException e) {
-//					// Ignore, since there's not really anything we can do if the OS wakes the thread up
-//					// prematurely.
-//				}
-//			}
-//		}
-//		
-//		bis.close();
 	}
 	
 	/**

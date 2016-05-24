@@ -19,6 +19,7 @@ import java.nio.file.Files;
  */
 public class FileWalkerStream implements AutoCloseable {
 	private final FileWalker walker;
+	private final int blockSize;
 	private final int bufferSize;
 	private BufferedInputStream bs;
 	private int delayMS;
@@ -28,13 +29,15 @@ public class FileWalkerStream implements AutoCloseable {
 	 * Constructor.
 	 * 
 	 * @param walker The FileWalker that backs this stream.
+	 * @param blockSize Size of one IO block.
 	 * @param bufferSize Size of the internal read buffer.
 	 * @param ioRate Maximum MB/sec we're allowed to perform.
 	 * @param noStep Prohibit stepping to the next file (single-file-only mode).
 	 * @throws IOException if the underlying reader failed.
 	 */
-	public FileWalkerStream(FileWalker walker, int bufferSize, double ioRate, boolean noStep) throws IOException {
+	public FileWalkerStream(FileWalker walker, int blockSize, int bufferSize, double ioRate, boolean noStep) throws IOException {
 		this.walker = walker;
+		this.blockSize = blockSize;
 		this.bufferSize = bufferSize;
 		bs = null;
 		if (ioRate == CompScan.UNLIMITED) {
@@ -50,9 +53,9 @@ public class FileWalkerStream implements AutoCloseable {
 	}
 	
 	/**
-	 * Get one buffer's worth of bytes from the 
+	 * Get one buffer's worth of bytes from the stream.
 	 * 
-	 * @return 
+	 * @return One buffer's worth of bytes from the stream.
 	 * @throws IOException if an error occured with the underlying file.
 	 */
 	public byte[] getBytes() throws IOException {
@@ -67,12 +70,20 @@ public class FileWalkerStream implements AutoCloseable {
 		while (totalRead < bufferSize && hasMore()) {
 			int remaining = bufferSize - totalRead;
 			int bytesRead = readThrottled(bs, buffer, totalRead, remaining);
-			if (bytesRead > 0) {
-				totalRead += bytesRead;
+			if (bytesRead <= 0) {
+				break;
 			}
 			if (bytesRead < remaining) {
+				// Pad to next block boundary.
+				int remainder = bytesRead % blockSize;
+				if (remainder != 0) {
+					int end = bytesRead + (blockSize - remainder);
+					bytesRead += clearBuffer(bytesRead, end, buffer);
+				}
+				// Get the next file if possible.
 				step();
 			}
+			totalRead += bytesRead;
 		}
 		
 		if (totalRead < bufferSize) {
@@ -139,10 +150,11 @@ public class FileWalkerStream implements AutoCloseable {
 	 * @param start Starting offset from which to clear.
 	 * @param end Index after the maximum index to clear (half-closed).
 	 * @param buffer Buffer to clear.
+	 * @return The number of bytes cleared.
 	 */
-	private void clearBuffer(int start, int end, byte[] buffer) {
+	private int clearBuffer(int start, int end, byte[] buffer) {
 		if (end < start) {
-			return;
+			return 0;
 		}
 		if (start < 0) {
 			start = 0;
@@ -153,6 +165,7 @@ public class FileWalkerStream implements AutoCloseable {
 		for (int i = start; i < end; i++) {
 			buffer[i] = 0x0;
 		}
+		return end - start;
 	}
 	
 	/**

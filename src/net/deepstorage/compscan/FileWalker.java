@@ -46,7 +46,7 @@ public class FileWalker implements AutoCloseable {
 	 * 
 	 * @param root Path to the root of the datastore to scan.
 	 * @param scanMode The ScanMode to use. If NORMAL, the resulting file stream will
-	 *                 contain all regular files. IF VMDK, the file stream will contain
+	 *                 contain all regular files. If VMDK, the file stream will contain
 	 *                 only those files whose extensions are in CompScan.VALID_EXTENSIONS.
 	 * @throws IOException if the file stream couldn't be opened.
 	 */

@@ -7,8 +7,12 @@
  */
 package net.deepstorage.compscan;
 
+import java.io.UnsupportedEncodingException;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -160,7 +164,7 @@ public class Compressor {
 		// We want the input data to be exactly one superblock in size. 
 		byte[] compressed = compressionInterface.compress(data, blockSize);
 
-		CompressionInfo ci = new CompressionInfo(data.length, compressed.length);
+		CompressionInfo ci = new CompressionInfo(data.length, compressed.length, hashBuffer(data));
 		bytesRead += ci.bytesRead;
 		blocksRead += ci.blocksRead;
 		superblocksRead += 1L;
@@ -171,13 +175,47 @@ public class Compressor {
 	}
 	
 	/**
+	 * Generate SHA-1 hashes for the blocks in a superblock.
+	 * 
+	 * @param data Data buffer for which to generate hashes. Must be exactly one superblock in size.
+	 * @return Map<String, Long> with counters of hash codes.
+	 * @throws BufferLengthException if the buffer is the wrong size.
+	 */
+	public Map<String, Long> hashBuffer(byte[] data) throws BufferLengthException {
+		if (data.length != buffer.length) {
+			throw new BufferLengthException(
+					String.format(
+							"Compressor.hashBuffer requires exactly one superblock of data: %1$d bytes given, %2$d bytes expected.",
+							data.length, buffer.length));
+		}
+		Map<String, Long> counters = new HashMap<>();
+		// Since the buffer is enforced to be one superblock, an even multiple of block size, we can use simple
+		// iteration.
+		for (int i = 0; i + blockSize <= data.length; i += blockSize) {
+			try {
+				String key = SHA1Encoder.encode(Arrays.copyOfRange(data, i, i + blockSize));
+				if (!counters.containsKey(key)) {
+					counters.put(key, 1L);
+				} else {
+					counters.put(key, counters.get(key) + 1L);
+				}
+			} catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
+				// Really, this should never happen, since we know the algorithm exists.
+				e.printStackTrace();
+			}
+		}
+		
+		return counters;
+	}
+	
+	/**
 	 * Get the total compression info for all data passed to feedData up until now.
 	 * 
 	 * @return CompressionInfo containing the compression info for all data fed up until now.
 	 */
 	public CompressionInfo getCompressionInfo() {
 		return new CompressionInfo(bytesRead, blocksRead, superblocksRead, compressedBytes,
-				                   compressedBlocks, actualBytes);
+				                   compressedBlocks, actualBytes, null);
 	}
 	
 	/**
@@ -190,6 +228,7 @@ public class Compressor {
 		public final long compressedBytes;
 		public final long compressedBlocks;
 		public final long actualBytes;
+		private final Map<String, Long> hashes;
 		
 		/**
 		 * Instantiate a new CompressionInfo from raw values.
@@ -200,15 +239,17 @@ public class Compressor {
 		 * @param compressedBytes Number of bytes after compression.
 		 * @param compressedBlocks Number of blocks needed to hold the comrpessed data, rounded up.
 		 * @param actualBytes Actual number of bytes needed to store compressedBlocks blocks.
+		 * @param hashes Map<String, Long> of counters for hash codes.
 		 */
-		private CompressionInfo(long bytesRead, long blocksRead, long superblocksRead,
-				                long compressedBytes, long compressedBlocks, long actualBytes) {
+		private CompressionInfo(long bytesRead, long blocksRead, long superblocksRead, long compressedBytes,
+				                long compressedBlocks, long actualBytes, Map<String, Long> hashes) {
 			this.bytesRead = bytesRead;
 			this.blocksRead = blocksRead;
 			this.superblocksRead = superblocksRead;
 			this.compressedBytes = compressedBytes;
 			this.compressedBlocks = compressedBlocks;
 			this.actualBytes = actualBytes;
+			this.hashes = hashes;
 		}
 		
 		/**
@@ -216,8 +257,9 @@ public class Compressor {
 		 * 
 		 * @param bytesRead Initial size of the data.
 		 * @param compressedBytes Size of the compressed data.
+		 *  * @param hashes Map<String, Long> of counters for hash codes.
 		 */
-		private CompressionInfo(long bytesRead, long compressedBytes) throws BufferLengthException {
+		private CompressionInfo(long bytesRead, long compressedBytes, Map<String, Long> hashes) throws BufferLengthException {
 			this.bytesRead = bytesRead;
 			this.compressedBytes = compressedBytes;
 			
@@ -227,6 +269,16 @@ public class Compressor {
 			compressedBlocks = (compressedBytes % blockSize == 0 ?
 					compressedBytes / blockSize : compressedBytes / blockSize + 1);
 			actualBytes = compressedBlocks * blockSize;
+			this.hashes = hashes;
+		}
+		
+		/**
+		 * Get the hashes map.
+		 * 
+		 * @return Map<String, Long> containing the hash counters.
+		 */
+		public Map<String, Long> getHashes() {
+			return hashes;
 		}
 	}
 	

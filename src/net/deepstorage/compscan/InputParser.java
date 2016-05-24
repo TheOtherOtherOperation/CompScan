@@ -20,8 +20,9 @@ import java.util.Queue;
 import net.deepstorage.compscan.CompScan.ScanMode;
 
 /**
- * @author user1
- *
+ * CLI parser for CompScan.
+ * 
+ * @author Ramon A. Lovato
  */
 public class InputParser {
 	// Positional arguments.
@@ -47,6 +48,7 @@ public class InputParser {
 	private int bufferSize;
 	private boolean overwriteOK;
 	private Compressor compressor;
+	private boolean printHashes;
 	
 	/**
 	 * Constructor.
@@ -61,6 +63,7 @@ public class InputParser {
 		ioRate = compScan.getIORate();
 		bufferSize = CompScan.ONE_MB;
 		overwriteOK = false;
+		printHashes = false;
 		
 		for (String s : POSITIONAL_ARGS) {
 			if (!assigned.containsKey(s)) {
@@ -98,7 +101,7 @@ public class InputParser {
 		checkPositionals();
 		
 		compScan.setup(ioRate, pathIn, pathOut, scanMode, blockSize, superblockSize, bufferSize, overwriteOK,
-				compressor);
+				compressor, printHashes);
 		printConfig();
 	}
 	
@@ -129,14 +132,11 @@ public class InputParser {
 		// Output path.
 		case "pathOut":
 			pathOut = Paths.get(arg);
-			if (Files.exists(pathOut) && !overwriteOK) {
-				throw new IllegalArgumentException(
-						String.format("Output path \"%1$s\" already exist.", arg));
-			} else if (!Files.isDirectory(pathOut.getParent())) {
+			if (!Files.isDirectory(pathOut)) {
 				throw new IllegalArgumentException(
 						String.format(
-								"Output directory \"%1$s\" does not exist.",
-								pathOut.getParent().toString()));
+								"Output directory \"%1$s\" does not exist or is not a directory.",
+								pathOut.toString()));
 			}
 			break;
 		// Block size.
@@ -243,6 +243,9 @@ public class InputParser {
 		case "--overwrite":
 			overwriteOK = true;
 			break;
+		case "--hashes":
+			printHashes = true;
+			break;
 		// Default.
 		default:
 			throw new IllegalArgumentException(
@@ -279,11 +282,12 @@ public class InputParser {
 				"    - pathIn:            %2$s%n" +
 				"    - pathOut:           %3$s%n" +
 				"    - scanMode:          %4$s%n" +
-				"    - blockSize:         %5$s%n" +
-				"    - superblockSize:    %6$d%n" +
-				"    - bufferSize:        %7$d%n" +
+				"    - blockSize:         %5$s bytes%n" +
+				"    - superblockSize:    %6$d bytes%n" +
+				"    - bufferSize:        %7$d bytes%n" +
 				"    - overwriteOK:       %8$s%n" +
-				"    - formatString:      %9$s%n",
+				"    - printHashes:       %9$s%n" +
+				"    - formatString:      %10$s%n",
 				(ioRate == CompScan.UNLIMITED ? "UNLIMITED" : Double.toString(ioRate)),
 				pathIn,
 				pathOut,
@@ -292,6 +296,7 @@ public class InputParser {
 				superblockSize,
 				bufferSize,
 				Boolean.toString(overwriteOK),
+				Boolean.toString(printHashes),
 				formatString
 				);
 		System.out.println(setupString);
