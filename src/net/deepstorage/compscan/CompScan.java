@@ -62,6 +62,9 @@ public class CompScan {
 	private boolean overwriteOK;
 	private Compressor compressor;
 	private boolean printHashes;
+	private boolean verbose;
+	private MutableCounter hashCounter;
+	private boolean printUsage;
 	
 	/**
 	 * Default constructor.
@@ -79,6 +82,8 @@ public class CompScan {
 		overwriteOK = false;
 		compressor = null;
 		printHashes = false;
+		verbose = false;
+		printUsage = false;
 		
 		setupLock = false;
 		date = Calendar.getInstance().getTime();
@@ -99,10 +104,13 @@ public class CompScan {
 	 * @param overwriteOK Whether it's allowed to overwrite the output file.
 	 * @param compressor Compressor associated with formatString.
 	 * @param printHashes Whether or not to print the hash table.
+	 * @param verbose Whether or not to enable verbose console logging.
+	 * @param printUsage Whether or not to include estimated memory usage in console output.
 	 * @throws Exception if called more than once.
 	 */
 	void setup(double ioRate, Path pathIn, Path pathOut, ScanMode scanMode, int blockSize, int superblockSize,
-			int bufferSize, boolean overwriteOK, Compressor compressor, boolean printHashes) {
+			int bufferSize, boolean overwriteOK, Compressor compressor, boolean printHashes, boolean verbose,
+			boolean printUsage) {
 		if (setupLock) {
 			System.err.println("CompScan.setup cannot be called more than once.");
 			System.exit(1);
@@ -117,6 +125,8 @@ public class CompScan {
 		this.overwriteOK = overwriteOK;
 		this.compressor = compressor;
 		this.printHashes = printHashes;
+		this.verbose = verbose;
+		this.printUsage = printUsage;
 		setupLock = true;
 	}
 	
@@ -130,10 +140,11 @@ public class CompScan {
 		results.set("block size", blockSize);
 		results.set("superblock size", superblockSize);
 		
-		ConsoleDisplayThread cdt = new ConsoleDisplayThread(results);
+		hashCounter = new MutableCounter();
+		ConsoleDisplayThread cdt = new ConsoleDisplayThread(results, hashCounter, printUsage);
 
 		try {
-			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, results);
+			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, results, hashCounter, verbose);
 			cdt.start();
 			fs.scan();
 			if (printHashes) {
@@ -186,10 +197,11 @@ public class CompScan {
 		
 		List<Results> allResults = new LinkedList<>();
 		
-		ConsoleDisplayThread cdt = new ConsoleDisplayThread(totals);
+		hashCounter = new MutableCounter();
+		ConsoleDisplayThread cdt = new ConsoleDisplayThread(totals, hashCounter, printUsage);
 		
 		try {
-			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, totals);
+			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, totals, hashCounter, verbose);
 			cdt.start();
 			fs.scanVMDKMode(allResults, this, printHashes);
 		} catch (IOException e) {
@@ -316,6 +328,8 @@ public class CompScan {
 				+ "         formatString      compression format to use%n"
 			    + "Optional Arguments%n"
 				+ "         -h, --help        print this help message%n"
+			    + "         --verbose         enable verbose console feedback (should only be used for debugging)%n"
+				+ "         --usage           enable printing of estimated memory usage (requires wide console)%n"
 			    + "         --vmdk            whether to report individual virtual disks separately%n"
 			    + "         --overwrite       whether overwriting the output file is allowed%n"
 				+ "         --rate MB_PER_SEC maximum MB/sec we're allowed to read%n"
@@ -366,7 +380,34 @@ public class CompScan {
 	}
 	
 	/**
-	 * A simple subclass for encapsulating test results.
+	 * A simple inner class for keeping track of the current hash count.
+	 */
+	public class MutableCounter {
+		private long c;
+		
+		public MutableCounter() {
+			resetCount();
+		}
+		
+		public void setCount(long c) {
+			this.c = c;
+		}
+		
+		public long getCount() {
+			return c;
+		}
+		
+		public void resetCount() {
+			c = 0L;
+		}
+		
+		public void addCount(long c) {
+			this.c += c;
+		}
+	}
+	
+	/**
+	 * A simple static nested class for encapsulating test results.
 	 */
 	public static class Results {
 		private final String[] KEYS = {
@@ -497,7 +538,8 @@ public class CompScan {
 			addTo("compressed bytes", ci.compressedBytes);
 			addTo("compressed blocks", ci.compressedBlocks);
 			addTo("actual bytes needed", ci.actualBytes);
-			updateHashes(ci.getHashes());
+			Map<String, Long> ciHashes = ci.getHashes();
+			updateHashes(ciHashes);
 		}
 		
 		/**

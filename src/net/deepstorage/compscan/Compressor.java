@@ -229,6 +229,7 @@ public class Compressor {
 		public final long compressedBlocks;
 		public final long actualBytes;
 		private final Map<String, Long> hashes;
+		public final long uniqueHashes;
 		
 		/**
 		 * Instantiate a new CompressionInfo from raw values.
@@ -250,6 +251,7 @@ public class Compressor {
 			this.compressedBlocks = compressedBlocks;
 			this.actualBytes = actualBytes;
 			this.hashes = hashes;
+			uniqueHashes = hashes.size();
 		}
 		
 		/**
@@ -270,6 +272,7 @@ public class Compressor {
 					compressedBytes / blockSize : compressedBytes / blockSize + 1);
 			actualBytes = compressedBlocks * blockSize;
 			this.hashes = hashes;
+			uniqueHashes = hashes.size();
 		}
 		
 		/**

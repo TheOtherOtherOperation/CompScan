@@ -30,15 +30,17 @@ public class FileWalker implements AutoCloseable {
 	private Iterator<Path> iterator;
 	private Queue<Path> pending;
 	private long filesAccessed;
+	private boolean verbose;
 	
 	/**
 	 * Create a new FileScanner beginning at root.
 	 * 
 	 * @param root Path to the root of the datastore to scan.
+	 * @param verbose Whether or not to enable verbose console logging.
 	 * @throws IOException if the file stream couldn't be opened.
 	 */
-	public FileWalker(Path root) throws IOException {
-		this(root, ScanMode.NORMAL);
+	public FileWalker(Path root, boolean verbose) throws IOException {
+		this(root, ScanMode.NORMAL, verbose);
 	}
 	
 	/**
@@ -48,10 +50,12 @@ public class FileWalker implements AutoCloseable {
 	 * @param scanMode The ScanMode to use. If NORMAL, the resulting file stream will
 	 *                 contain all regular files. If VMDK, the file stream will contain
 	 *                 only those files whose extensions are in CompScan.VALID_EXTENSIONS.
+	 * @param verbose Whether or not to enable verbose console logging.
 	 * @throws IOException if the file stream couldn't be opened.
 	 */
-	public FileWalker(Path root, ScanMode scanMode) throws IOException {
+	public FileWalker(Path root, ScanMode scanMode, boolean verbose) throws IOException {
 		this.root = root;
+		this.verbose = verbose;
 		
 		if (scanMode == ScanMode.VMDK) {
 			fileStream = Files.walk(this.root).filter(f -> isVMDK(f));
@@ -71,6 +75,9 @@ public class FileWalker implements AutoCloseable {
 	 */
 	public Path next() {
 		Path p = (pending.size() > 0 ? pending.poll() : iterator.next());
+		if (verbose && p != null) {
+			System.out.println("Opening file: \"" + p.toString() + "\"");
+		}
 		filesAccessed++;
 		return p;
 	}
@@ -87,6 +94,9 @@ public class FileWalker implements AutoCloseable {
 	public Path lookAhead() {
 		Path next = iterator.next();
 		pending.add(next);
+		if (verbose && next != null) {
+			System.out.println("Looking ahead to file: \"" + next.toString() + "\"");
+		}
 		return next;
 	}
 	

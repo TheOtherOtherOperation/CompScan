@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
+import net.deepstorage.compscan.CompScan.MutableCounter;
 import net.deepstorage.compscan.CompScan.Results;
 import net.deepstorage.compscan.CompScan.ScanMode;
 import net.deepstorage.compscan.Compressor.BufferLengthException;
@@ -27,6 +28,8 @@ public class FileScanner {
 	private Results totals;
 	private int superblockSize;
 	private double ioRate;
+	private boolean verbose;
+	private MutableCounter hashCounter;
 	
 	/**
 	 * Constructor.
@@ -35,15 +38,20 @@ public class FileScanner {
 	 * @param bufferSize Size of the internal read buffer.
 	 * @param ioRate Maximum IO rate in MB/s to throttle the scanning.
 	 * @param compressor Compressor to use.
-	 * @param results Results object to update with the scan data.
+	 * @param totals Results object to update with the total scan data.
+	 * @param hashCounter MutableCounter used for tracking the number of currently active unique hashes.
+	 * @param verbose Whether or not to enable verbose logging.
 	 */
-	public FileScanner(Path root, int blockSize, int bufferSize, double ioRate, Compressor compressor, Results results) {
+	public FileScanner(Path root, int blockSize, int bufferSize, double ioRate, Compressor compressor,
+			Results totals, MutableCounter hashCounter, boolean verbose) {
 		this.root = root;
 		this.blockSize = blockSize;
 		this.bufferSize = bufferSize;
+		this.verbose = verbose;
 		
 		this.compressor = compressor;
-		this.totals = results;
+		this.totals = totals;
+		this.hashCounter = hashCounter;
 		superblockSize = compressor.getSuperblockSize();
 		
 		int remainder = bufferSize % superblockSize;
@@ -66,7 +74,7 @@ public class FileScanner {
 	 * @throws NoNextFileException if file root contains no regular files.
 	 */
 	public void scan() throws IOException, BufferLengthException, NoNextFileException {
-		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(root), blockSize, bufferSize, ioRate, false)) {
+		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(root, verbose), blockSize, bufferSize, ioRate, false)) {
 			if (!fws.hasMore()) {
 				throw new NoNextFileException(
 						String.format(
@@ -91,6 +99,7 @@ public class FileScanner {
 			byte[] buffer = fws.getBytes();
 			scanBuffer(buffer, r);
 			r.set("files read", fws.getFilesRead());
+			hashCounter.setCount(r.getHashes().size());
 		}
 	}
 	
@@ -108,7 +117,9 @@ public class FileScanner {
 	 */
 	public void scanVMDKMode(List<Results> fileResults, CompScan cs, boolean printHashes)
 			throws IOException, BufferLengthException, NoNextFileException {
-		try (FileWalker fw = new FileWalker(root, ScanMode.VMDK)) {
+		// scanFile will use the local verbose field, so to prevent double printing, always use false for
+		// this walker.
+		try (FileWalker fw = new FileWalker(root, ScanMode.VMDK, false)) {
 			if (!fw.hasNext()) {
 				throw new NoNextFileException(
 						String.format(
@@ -120,6 +131,7 @@ public class FileScanner {
 				Results r = new Results(f.toString(), totals.getTimestamp());
 				r.set("block size", totals.get("block size"));
 				r.set("superblock size", totals.get("superblock size"));
+				hashCounter.resetCount();
 				scanFile(f, r);
 				r.set("files read", 1L);
 				
@@ -141,6 +153,7 @@ public class FileScanner {
 	 * 
 	 * @param f Path to the file to scan.
 	 * @param r Results object to update with the scan data.
+	 * @param verbose Whether or not to enable verbose logging.
 	 * @throws IOException if an IO error occurs.
 	 * @throws BufferLengthException if the buffer is the wrong size.
 	 */
@@ -151,7 +164,7 @@ public class FileScanner {
 		
 		totals.incrementFilesRead();
 		
-		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(f), blockSize, bufferSize, ioRate, true)) {
+		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(f, verbose), blockSize, bufferSize, ioRate, true)) {
 			byte[] buffer = new byte[bufferSize];
 			while (fws.hasMore()) {
 				buffer = fws.getBytes();
@@ -159,6 +172,7 @@ public class FileScanner {
 				scanBuffer(buffer, intermediate);
 				r.feedOtherResults(intermediate, intermediate.getHashes());
 				totals.feedOtherResults(intermediate, null);
+				hashCounter.setCount(r.getHashes().size());;
 			}
 		}
 	}

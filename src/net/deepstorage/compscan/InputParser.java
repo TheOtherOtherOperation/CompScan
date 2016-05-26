@@ -49,6 +49,8 @@ public class InputParser {
 	private boolean overwriteOK;
 	private Compressor compressor;
 	private boolean printHashes;
+	private boolean verbose;
+	private boolean printUsage;
 	
 	/**
 	 * Constructor.
@@ -64,6 +66,8 @@ public class InputParser {
 		bufferSize = CompScan.ONE_MB;
 		overwriteOK = false;
 		printHashes = false;
+		verbose = false;
+		printUsage = false;
 		
 		for (String s : POSITIONAL_ARGS) {
 			if (!assigned.containsKey(s)) {
@@ -101,7 +105,7 @@ public class InputParser {
 		checkPositionals();
 		
 		compScan.setup(ioRate, pathIn, pathOut, scanMode, blockSize, superblockSize, bufferSize, overwriteOK,
-				compressor, printHashes);
+				compressor, printHashes, verbose, printUsage);
 		printConfig();
 	}
 	
@@ -201,6 +205,15 @@ public class InputParser {
 			CompScan.printHelp();
 			System.exit(0);
 		break;
+		// Verbose mode.
+		case "--verbose":
+			verbose = true;
+			break;
+		// Memory usage estimate.
+		case "--usage":
+			printUsage = true;
+			break;
+		// VMDK mode.
 		case "--vmdk":
 			scanMode = ScanMode.VMDK;
 			break;
@@ -287,7 +300,8 @@ public class InputParser {
 				"    - bufferSize:        %7$d bytes%n" +
 				"    - overwriteOK:       %8$s%n" +
 				"    - printHashes:       %9$s%n" +
-				"    - formatString:      %10$s%n",
+				"    - formatString:      %10$s%n" +
+				"    - verbose:           %11$s%n",
 				(ioRate == CompScan.UNLIMITED ? "UNLIMITED" : Double.toString(ioRate)),
 				pathIn,
 				pathOut,
@@ -297,7 +311,8 @@ public class InputParser {
 				bufferSize,
 				Boolean.toString(overwriteOK),
 				Boolean.toString(printHashes),
-				formatString
+				formatString,
+				Boolean.toString(verbose)
 				);
 		System.out.println(setupString);
 	}

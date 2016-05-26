@@ -7,6 +7,7 @@
  */
 package net.deepstorage.compscan;
 
+import net.deepstorage.compscan.CompScan.MutableCounter;
 import net.deepstorage.compscan.CompScan.Results;
 
 /**
@@ -20,16 +21,20 @@ public class ConsoleDisplayThread extends Thread {
 	private String lastString;
 	private long startTime;
 	private long elapsedTime;
+	private MutableCounter hashCounter;
+	private boolean printUsage;
 	
 	/**
 	 * Constructor.
 	 * 
 	 * @param results Results object for which to display output.
 	 */
-	public ConsoleDisplayThread(Results results) {
+	public ConsoleDisplayThread(Results results, MutableCounter hashCounter, boolean printUsage) {
 		this.results = results;
+		this.hashCounter = hashCounter;
 		lastString = "";
 		startTime = System.currentTimeMillis();
+		this.printUsage = printUsage;
 	}
 
 	@Override
@@ -56,13 +61,44 @@ public class ConsoleDisplayThread extends Thread {
 	}
 	
 	/**
+	 * Estimate of the current memory usage.
+	 * 
+	 * @return A formatted string of the memory estimates.
+	 */
+	private String getMemoryEstimates() {
+		Runtime runtime = Runtime.getRuntime();
+
+		StringBuilder sb = new StringBuilder();
+		long maxMemory = runtime.maxMemory();
+		long allocatedMemory = runtime.totalMemory();
+		long freeMemory = runtime.freeMemory();
+		
+		String formatString = "%0" + String.valueOf(
+				maxMemory / CompScan.ONE_MB).length() + "dMB";
+
+		sb.append(String.format(formatString, freeMemory / CompScan.ONE_MB) + "/");
+		sb.append(String.format(formatString, allocatedMemory / CompScan.ONE_MB) + "/");
+		sb.append(String.format(formatString, maxMemory / CompScan.ONE_MB) + "/");
+		sb.append(String.format(formatString, (freeMemory + (maxMemory - allocatedMemory)) / CompScan.ONE_MB));
+		
+		return sb.toString();
+	}
+	
+	/**
 	 * Print a progress line.
 	 */
 	private void printProgress() {
-		String s = String.format("Elapsed time: %1$d sec    Files read: %2$d    Megabytes read: %3$.2f",
+		String usageString = "";
+		if (printUsage) {
+			usageString = String.format("    Memory estimate (free/alloc/max/total): %s", getMemoryEstimates());
+		}
+		String s = String.format("Elapsed time: %1$d sec    Files read: %2$d    Megabytes read: %3$.2f    " +
+								 "Unique hashes: %4$d%5$s",
 				elapsedTime / 1000,
 				results.get("files read"),
-				((float) results.get("bytes read"))/((float) CompScan.ONE_MB));
+				((float) results.get("bytes read"))/((float) CompScan.ONE_MB),
+				hashCounter.getCount(),
+				usageString);
 		lastString = s;
 		System.out.print(s);
 	}
