@@ -628,7 +628,7 @@ public class CompScan {
 					.stream()
 					.map(v -> String.valueOf(v))
 					.collect(Collectors.toList()));
-			values.add(0, name);
+			values.add(0, String.format("\"$s\"", name));
 			values.add(1, timestamp);
 			values.add(String.valueOf(getRawCompressionFactor()));
 			values.add(String.valueOf(getSuperblockCompressionFactor()));
@@ -710,15 +710,23 @@ public class CompScan {
 		}
 		
 		/**
+		 * Build a formatted string of the hash counters map.
+		 * 
+		 * @return Formatted string of the hash counters map.
+		 */
+		public String makeHashString() {
+			return String.join(System.lineSeparator(),
+					hashes.entrySet()
+					.stream()
+					.map(x -> String.format("%1$s -> %2$d", x.getKey(), x.getValue()))
+					.collect(Collectors.toList()));
+		}
+		
+		/**
 		 * Debugging method for printing the hash counters map.
 		 */
 		public void printHashes() {
-			System.out.println(
-					String.join(System.lineSeparator(),
-							hashes.entrySet()
-							.stream()
-							.map(x -> String.format("%1$s -> %2$d", x.getKey(), x.getValue()))
-							.collect(Collectors.toList())));
+			System.out.println(makeHashString());
 		}
 	}
 }
