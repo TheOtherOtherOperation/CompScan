@@ -628,7 +628,7 @@ public class CompScan {
 					.stream()
 					.map(v -> String.valueOf(v))
 					.collect(Collectors.toList()));
-			values.add(0, String.format("\"$s\"", name));
+			values.add(0, String.format("\"%s\"", name));
 			values.add(1, timestamp);
 			values.add(String.valueOf(getRawCompressionFactor()));
 			values.add(String.valueOf(getSuperblockCompressionFactor()));
