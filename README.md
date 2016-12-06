@@ -39,10 +39,10 @@
       <meta name="browser-stats-url" content="https://api.github.com/_private/browser/stats">
     <meta name="browser-errors-url" content="https://api.github.com/_private/browser/errors">
     <link rel="assets" href="https://assets-cdn.github.com/">
-    <link rel="web-socket" href="wss://live.github.com/_sockets/NjE3NDA5NToyNDI3NGZkZjVkMjUzMzY4NWQ2YTZhOGUwNjA2Yjc5Yzo0ZmQxOWQ1MTdjMmRiZTk0NTRmOTA0ZWQ5ZjAzMGEyYzFjNjhjM2Y0YWZkMDc5MGIzZTE4MDc5MmEwN2YyNThk--0406a6d309316e22bb789a5bf388d7eaf6faab07">
+    <link rel="web-socket" href="wss://live.github.com/_sockets/NjE3NDA5NToyNDI3NGZkZjVkMjUzMzY4NWQ2YTZhOGUwNjA2Yjc5YzowYTRhYzhjMmU0NGQ0ZjQ5YWIzZTQ0NTQwYTM5MTNkNWUzY2VmYTBhYWQ4NWM4ZDk0NjMyYmFlZTRjMDRjNzgy--32e125899e879ba4cc2566738b456282283509ab">
     <meta name="pjax-timeout" content="1000">
     <link rel="sudo-modal" href="/sessions/sudo_modal">
-    <meta name="request-id" content="32C1EE39:629A:2B90CFB8:58462924" data-pjax-transient>
+    <meta name="request-id" content="32C1EE39:6299:252CBF15:584629EC" data-pjax-transient>
 
     <meta name="msapplication-TileImage" content="/windows-tile.png">
     <meta name="msapplication-TileColor" content="#ffffff">
@@ -52,7 +52,7 @@
 <meta name="google-site-verification" content="ZzhVyEFwb7w3e0-uOTltm8Jsck2F5StVihD0exw2fsA">
     <meta name="google-analytics" content="UA-3769691-2">
 
-<meta content="collector.githubapp.com" name="octolytics-host" /><meta content="github" name="octolytics-app-id" /><meta content="32C1EE39:629A:2B90CFB8:58462924" name="octolytics-dimension-request_id" /><meta content="6174095" name="octolytics-actor-id" /><meta content="HmarksDeepStorage" name="octolytics-actor-login" /><meta content="e92ff8d47ec40ff1197be64a4647d3c733b1134aeba1e4a69f28b49cf4ec4bca" name="octolytics-actor-hash" />
+<meta content="collector.githubapp.com" name="octolytics-host" /><meta content="github" name="octolytics-app-id" /><meta content="32C1EE39:6299:252CBF15:584629EC" name="octolytics-dimension-request_id" /><meta content="6174095" name="octolytics-actor-id" /><meta content="HmarksDeepStorage" name="octolytics-actor-login" /><meta content="e92ff8d47ec40ff1197be64a4647d3c733b1134aeba1e4a69f28b49cf4ec4bca" name="octolytics-actor-hash" />
 <meta content="/&lt;user-name&gt;/&lt;repo-name&gt;/blob/show" data-pjax-transient="true" name="analytics-location" />
 
 
@@ -65,9 +65,8 @@
     <meta name="user-login" content="HmarksDeepStorage">
 
         <meta name="expected-hostname" content="github.com">
-      <meta name="js-proxy-site-detection-payload" content="Y2RiODc1NWUzMWRlNmYxYjUxZDQwYTU1N2YyMTU0YmFmNzgzZDg2YTBiMjFhOGIxNWU4MGRlMjNmZTc3NzU2MXx7InJlbW90ZV9hZGRyZXNzIjoiNTAuMTkzLjIzOC41NyIsInJlcXVlc3RfaWQiOiIzMkMxRUUzOTo2MjlBOjJCOTBDRkI4OjU4NDYyOTI0IiwidGltZXN0YW1wIjoxNDgwOTkzMDY2LCJob3N0IjoiZ2l0aHViLmNvbSJ9">
+      <meta name="js-proxy-site-detection-payload" content="NTgyNDUwY2Y0NDRhYjBjYTZlNjcwMzczMjcxMzBkNTY5ZDgzMTEwZDg2MzVjMDMxZWIwMGFjNjIzYWRjZjM3ZXx7InJlbW90ZV9hZGRyZXNzIjoiNTAuMTkzLjIzOC41NyIsInJlcXVlc3RfaWQiOiIzMkMxRUUzOTo2Mjk5OjI1MkNCRjE1OjU4NDYyOUVDIiwidGltZXN0YW1wIjoxNDgwOTkzMjcwLCJob3N0IjoiZ2l0aHViLmNvbSJ9">
 
-      <meta name="accessibility-logger" value="1">
 
       <link rel="mask-icon" href="https://assets-cdn.github.com/pinned-octocat.svg" color="#000000">
       <link rel="icon" type="image/x-icon" href="https://assets-cdn.github.com/favicon.ico">
@@ -86,7 +85,7 @@
   <link href="https://github.com/TheOtherOtherOperation/CompScan/commits/master.atom" rel="alternate" title="Recent Commits to CompScan:master" type="application/atom+xml">
 
 
-      <link rel="canonical" href="https://github.com/TheOtherOtherOperation/CompScan/blob/master/bin/README.md" data-pjax-transient>
+      <link rel="canonical" href="https://github.com/TheOtherOtherOperation/CompScan/blob/master/src/README.md" data-pjax-transient>
   </head>
 
 
@@ -244,7 +243,7 @@
           Settings
         </a>
 
-        <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/logout" class="logout-form" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="bIQKnTMoJ5o9U4mXW/2anQHKaQntCgB4ZzMGt0ywhEYIJO+q8KzcQviIyEa8pePD2hF0qfxFZQLoCtX2UhHfew==" /></div>
+        <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/logout" class="logout-form" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="2zr1LpOU5JDf8hSiHxHiKNpEkMbnKY/ivDCTcp+oVq2/mhAZUBAfSBopVXP4SZt2AZ+NZvZm6pgzCUAzgQkNkA==" /></div>
           <button type="submit" class="dropdown-item dropdown-signout" data-ga-click="Header, sign out, icon:logout">
             Sign out
           </button>
@@ -280,7 +279,7 @@
 <ul class="pagehead-actions">
 
   <li>
-        <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/notifications/subscribe" class="js-social-container" data-autosubmit="true" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" data-remote="true" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="FoCXs/r7D4o+DKKgBhKKLchNh7HbV9appDRIdovyjCJyIHKEOX/0UvvX43HhSvNzE5aaEcoYs9MrDZs3lVPXHw==" /></div>      <input class="form-control" id="repository_id" name="repository_id" type="hidden" value="58494180" />
+        <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/notifications/subscribe" class="js-social-container" data-autosubmit="true" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" data-remote="true" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="YI/pdSsan82owLsDc7+WI4F/lGKpDbQvXsE1mZXbfkQELwxC6J5kFW0b+tKU5+99WqSJwrhC0VXR+ObYi3oleQ==" /></div>      <input class="form-control" id="repository_id" name="repository_id" type="hidden" value="58494180" />
 
         <div class="select-menu js-menu-container js-select-menu">
           <a href="/TheOtherOtherOperation/CompScan/subscription"
@@ -357,7 +356,7 @@
     
   <div class="js-toggler-container js-social-container starring-container ">
 
-    <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/TheOtherOtherOperation/CompScan/unstar" class="starred" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" data-remote="true" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="wj5T/zffSz3PPX33TDpDDbtRRHO3XHxKN/v7hU0WDbCmnrbI9Fuw5QrmPCarYjpTYIpZ06YTGTC4wijEU7dWjQ==" /></div>
+    <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/TheOtherOtherOperation/CompScan/unstar" class="starred" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" data-remote="true" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="9oxu+mYsHPzmQLfmuDUGvnAfeK5hqPYz1XdXoiI+EcqSLIvNpajnJCOb9jdfbX/gq8RlDnDnk0laToTjPJ9K9w==" /></div>
       <button
         type="submit"
         class="btn btn-sm btn-with-count js-toggler-target"
@@ -371,7 +370,7 @@
           1
         </a>
 </form>
-    <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/TheOtherOtherOperation/CompScan/star" class="unstarred" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" data-remote="true" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="WhnJGNEOrkDbIXqLga4fgD00AzTRYSpuPJv0Tj2EJtI+uSwvEopVmB76O1pm9mbe5u8elMAuTxSzoicPIyV97w==" /></div>
+    <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/TheOtherOtherOperation/CompScan/star" class="unstarred" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" data-remote="true" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="6evIEWgfus/vvUrJPDEti1fxI/1kooc/aSZk1mlojyGNSy0mq5tBFypmCxjbaVTVjCo+XXXt4kXmH7eXd8nUHA==" /></div>
       <button
         type="submit"
         class="btn btn-sm btn-with-count js-toggler-target"
@@ -486,9 +485,9 @@
 
     
 
-<a href="/TheOtherOtherOperation/CompScan/blob/a069b2418a4eba87eedbb77869dd46b694e80936/bin/README.md" class="d-none js-permalink-shortcut" data-hotkey="y">Permalink</a>
+<a href="/TheOtherOtherOperation/CompScan/blob/dae426596d7270d50e44dd8598681540a9c51bfd/src/README.md" class="d-none js-permalink-shortcut" data-hotkey="y">Permalink</a>
 
-<!-- blob contrib key: blob_contributors:v21:f69d63789f9b08142e039a5d617001fe -->
+<!-- blob contrib key: blob_contributors:v21:1e6f3443c984746832ce9b417a714d83 -->
 
 <div class="file-navigation js-zeroclipboard-container">
   
@@ -530,7 +529,7 @@
 
 
             <a class="select-menu-item js-navigation-item js-navigation-open selected"
-               href="/TheOtherOtherOperation/CompScan/blob/master/bin/README.md"
+               href="/TheOtherOtherOperation/CompScan/blob/master/src/README.md"
                data-name="master"
                data-skip-pjax="true"
                rel="nofollow">
@@ -541,7 +540,7 @@
             </a>
         </div>
 
-          <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/TheOtherOtherOperation/CompScan/branches" class="js-create-branch select-menu-item select-menu-new-item-form js-navigation-item js-new-item-form" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="RiRqa9VctNVuMUqbX2f8bQJcHwmZkw4E9QVnoeVhKNUihI9cFthPDavqC0q4P4Uz2YcCqYjca356PLTg+8Bz6A==" /></div>
+          <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/TheOtherOtherOperation/CompScan/branches" class="js-create-branch select-menu-item select-menu-new-item-form js-navigation-item js-new-item-form" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="p5rvc5yUR1+xfSfUlNr3NWRohOtaAf+XtuWvVkHF/1TDOgpEXxC8h3SmZgVzgo5rv7OZS0tOmu053HwXX2SkaQ==" /></div>
           <svg aria-hidden="true" class="octicon octicon-git-branch select-menu-item-icon" height="16" version="1.1" viewBox="0 0 10 16" width="10"><path fill-rule="evenodd" d="M10 5c0-1.11-.89-2-2-2a1.993 1.993 0 0 0-1 3.72v.3c-.02.52-.23.98-.63 1.38-.4.4-.86.61-1.38.63-.83.02-1.48.16-2 .45V4.72a1.993 1.993 0 0 0-1-3.72C.88 1 0 1.89 0 3a2 2 0 0 0 1 1.72v6.56c-.59.35-1 .99-1 1.72 0 1.11.89 2 2 2 1.11 0 2-.89 2-2 0-.53-.2-1-.53-1.36.09-.06.48-.41.59-.47.25-.11.56-.17.94-.17 1.05-.05 1.95-.45 2.75-1.25S8.95 7.77 9 6.73h-.02C9.59 6.37 10 5.73 10 5zM2 1.8c.66 0 1.2.55 1.2 1.2 0 .65-.55 1.2-1.2 1.2C1.35 4.2.8 3.65.8 3c0-.65.55-1.2 1.2-1.2zm0 12.41c-.66 0-1.2-.55-1.2-1.2 0-.65.55-1.2 1.2-1.2.65 0 1.2.55 1.2 1.2 0 .65-.55 1.2-1.2 1.2zm6-8c-.66 0-1.2-.55-1.2-1.2 0-.65.55-1.2 1.2-1.2.65 0 1.2.55 1.2 1.2 0 .65-.55 1.2-1.2 1.2z"/></svg>
             <div class="select-menu-item-text">
               <span class="select-menu-item-heading">Create branch: <span class="js-new-item-name"></span></span>
@@ -549,7 +548,7 @@
             </div>
             <input type="hidden" name="name" id="name" class="js-new-item-value">
             <input type="hidden" name="branch" id="branch" value="master">
-            <input type="hidden" name="path" id="path" value="bin/README.md">
+            <input type="hidden" name="path" id="path" value="src/README.md">
 </form>
       </div>
 
@@ -576,67 +575,44 @@
     <button aria-label="Copy file path to clipboard" class="js-zeroclipboard btn btn-sm BtnGroup-item tooltipped tooltipped-s" data-copied-hint="Copied!" type="button">Copy path</button>
   </div>
   <div class="breadcrumb js-zeroclipboard-target">
-    <span class="repo-root js-repo-root"><span class="js-path-segment"><a href="/TheOtherOtherOperation/CompScan"><span>CompScan</span></a></span></span><span class="separator">/</span><span class="js-path-segment"><a href="/TheOtherOtherOperation/CompScan/tree/master/bin"><span>bin</span></a></span><span class="separator">/</span><strong class="final-path">README.md</strong>
+    <span class="repo-root js-repo-root"><span class="js-path-segment"><a href="/TheOtherOtherOperation/CompScan"><span>CompScan</span></a></span></span><span class="separator">/</span><span class="js-path-segment"><a href="/TheOtherOtherOperation/CompScan/tree/master/src"><span>src</span></a></span><span class="separator">/</span><strong class="final-path">README.md</strong>
   </div>
 </div>
 
-
-  <div class="commit-tease">
-      <span class="float-right">
-        <a class="commit-tease-sha" href="/TheOtherOtherOperation/CompScan/commit/d86557ff3329dcf1cef7473b8de824ce24ca24be" data-pjax>
-          d86557f
-        </a>
-        <relative-time datetime="2016-05-26T22:29:07Z">May 26, 2016</relative-time>
-      </span>
-      <div>
-        <img alt="@CubeVato" class="avatar" height="20" src="https://avatars2.githubusercontent.com/u/4993945?v=3&amp;s=40" width="20" />
-        <a href="/CubeVato" class="user-mention" rel="contributor">CubeVato</a>
-          <a href="/TheOtherOtherOperation/CompScan/commit/d86557ff3329dcf1cef7473b8de824ce24ca24be" class="message" data-pjax="true" title="Added description of JVM memory flags to README">Added description of JVM memory flags to README</a>
-      </div>
-
-    <div class="commit-tease-contributors">
-      <button type="button" class="btn-link muted-link contributors-toggle" data-facebox="#blob_contributors_box">
-        <strong>1</strong>
-         contributor
-      </button>
-      
-    </div>
-
-    <div id="blob_contributors_box" style="display:none">
-      <h2 class="facebox-header" data-facebox-id="facebox-header">Users who have contributed to this file</h2>
-      <ul class="facebox-user-list" data-facebox-id="facebox-description">
-          <li class="facebox-user-list-item">
-            <img alt="@CubeVato" height="24" src="https://avatars0.githubusercontent.com/u/4993945?v=3&amp;s=48" width="24" />
-            <a href="/CubeVato">CubeVato</a>
-          </li>
-      </ul>
-    </div>
+<include-fragment class="commit-tease" src="/TheOtherOtherOperation/CompScan/contributors/master/src/README.md">
+  <div>
+    Fetching contributors&hellip;
   </div>
 
+  <div class="commit-tease-contributors">
+    <img alt="" class="loader-loading float-left" height="16" src="https://assets-cdn.github.com/images/spinners/octocat-spinner-32-EAF2F5.gif" width="16" />
+    <span class="loader-error">Cannot retrieve contributors at this time</span>
+  </div>
+</include-fragment>
 
 <div class="file">
   <div class="file-header">
   <div class="file-actions">
 
     <div class="BtnGroup">
-      <a href="/TheOtherOtherOperation/CompScan/raw/master/bin/README.md" class="btn btn-sm BtnGroup-item" id="raw-url">Raw</a>
-        <a href="/TheOtherOtherOperation/CompScan/blame/master/bin/README.md" class="btn btn-sm js-update-url-with-hash BtnGroup-item">Blame</a>
-      <a href="/TheOtherOtherOperation/CompScan/commits/master/bin/README.md" class="btn btn-sm BtnGroup-item" rel="nofollow">History</a>
+      <a href="/TheOtherOtherOperation/CompScan/raw/master/src/README.md" class="btn btn-sm BtnGroup-item" id="raw-url">Raw</a>
+        <a href="/TheOtherOtherOperation/CompScan/blame/master/src/README.md" class="btn btn-sm js-update-url-with-hash BtnGroup-item">Blame</a>
+      <a href="/TheOtherOtherOperation/CompScan/commits/master/src/README.md" class="btn btn-sm BtnGroup-item" rel="nofollow">History</a>
     </div>
 
         <a class="btn-octicon tooltipped tooltipped-nw"
-           href="github-windows://openRepo/https://github.com/TheOtherOtherOperation/CompScan?branch=master&amp;filepath=bin%2FREADME.md"
+           href="github-windows://openRepo/https://github.com/TheOtherOtherOperation/CompScan?branch=master&amp;filepath=src%2FREADME.md"
            aria-label="Open this file in GitHub Desktop"
            data-ga-click="Repository, open with desktop, type:windows">
             <svg aria-hidden="true" class="octicon octicon-device-desktop" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M15 2H1c-.55 0-1 .45-1 1v9c0 .55.45 1 1 1h5.34c-.25.61-.86 1.39-2.34 2h8c-1.48-.61-2.09-1.39-2.34-2H15c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1zm0 9H1V3h14v8z"/></svg>
         </a>
 
-        <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/TheOtherOtherOperation/CompScan/edit/master/bin/README.md" class="inline-form js-update-url-with-hash" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="1ad1/fZIaxCHzuc3iHkQISagB1vDaqb4JrZdGnqF5COxB5DKNcyQyEIVpuZvIWl//Xsa+9Ilw4Kpj45bZCS/Hg==" /></div>
+        <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/TheOtherOtherOperation/CompScan/edit/master/src/README.md" class="inline-form js-update-url-with-hash" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="ye7N8OPHvikmh8JhFP4wlqlL//1HL6TuFoZjKoawOuOtTijHIENF8eNcg7DzpknIcpDiXVZgwZSZv7BrmBFh3g==" /></div>
           <button class="btn-octicon tooltipped tooltipped-nw" type="submit"
             aria-label="Edit this file" data-hotkey="e" data-disable-with>
             <svg aria-hidden="true" class="octicon octicon-pencil" height="16" version="1.1" viewBox="0 0 14 16" width="14"><path fill-rule="evenodd" d="M0 12v3h3l8-8-3-3-8 8zm3 2H1v-2h1v1h1v1zm10.3-9.3L12 6 9 3l1.3-1.3a.996.996 0 0 1 1.41 0l1.59 1.59c.39.39.39 1.02 0 1.41z"/></svg>
           </button>
-</form>        <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/TheOtherOtherOperation/CompScan/delete/master/bin/README.md" class="inline-form" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="zKZzkjRQBbVH6m4Dz7sl/544GAC0lyYRYSH+0fIUWqKoBpal99T+bYIxL9Io41yhReMFoKXYQ2vuGC2Q7LUBnw==" /></div>
+</form>        <!-- '"` --><!-- </textarea></xmp> --></option></form><form accept-charset="UTF-8" action="/TheOtherOtherOperation/CompScan/delete/master/src/README.md" class="inline-form" data-form-nonce="e0d8d741254ac23e79a065ccdd3ef36ccc7f4e3a" method="post"><div style="margin:0;padding:0;display:inline"><input name="utf8" type="hidden" value="&#x2713;" /><input name="authenticity_token" type="hidden" value="XVphtQ6AmpEp1ysNWYHn36PaC0kVv1UEq/giBcX9eEY5+oSCzQRhSewMaty+2Z6BeAEW6QTwMH4kwfFE21wjew==" /></div>
           <button class="btn-octicon btn-octicon-danger tooltipped tooltipped-nw" type="submit"
             aria-label="Delete this file" data-disable-with>
             <svg aria-hidden="true" class="octicon octicon-trashcan" height="16" version="1.1" viewBox="0 0 12 16" width="12"><path fill-rule="evenodd" d="M11 2H9c0-.55-.45-1-1-1H5c-.55 0-1 .45-1 1H2c-.55 0-1 .45-1 1v1c0 .55.45 1 1 1v9c0 .55.45 1 1 1h7c.55 0 1-.45 1-1V5c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1zm-1 12H3V5h1v8h1V5h1v8h1V5h1v8h1V5h1v9zm1-10H2V3h9v1z"/></svg>
@@ -756,7 +732,7 @@ Suppose we want to create a Zip compression format.
       <svg aria-hidden="true" class="octicon octicon-mark-github" height="24" version="1.1" viewBox="0 0 16 16" width="24"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
 </a>
     <ul class="site-footer-links">
-      <li>&copy; 2016 <span title="0.09238s from github-fe142-cp1-prd.iad.github.net">GitHub</span>, Inc.</li>
+      <li>&copy; 2016 <span title="0.13021s from github-fe149-cp1-prd.iad.github.net">GitHub</span>, Inc.</li>
         <li><a href="https://github.com/site/terms" data-ga-click="Footer, go to terms, text:terms">Terms</a></li>
         <li><a href="https://github.com/site/privacy" data-ga-click="Footer, go to privacy, text:privacy">Privacy</a></li>
         <li><a href="https://github.com/security" data-ga-click="Footer, go to security, text:security">Security</a></li>
