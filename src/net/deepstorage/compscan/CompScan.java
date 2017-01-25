@@ -144,7 +144,9 @@ public class CompScan {
 		ConsoleDisplayThread cdt = new ConsoleDisplayThread(results, hashCounter, printUsage);
 
 		try {
-			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, results, hashCounter, verbose);
+			FileScanner fs = new FileScanner(
+			   pathIn, blockSize, bufferSize, ioRate, compressor, results, hashCounter, verbose
+		   );
 			cdt.start();
 			fs.scan();
 			if (printHashes) {
