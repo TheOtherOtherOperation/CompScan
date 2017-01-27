@@ -19,9 +19,11 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+import java.util.function.Predicate;
 
 import net.deepstorage.compscan.Compressor.BufferLengthException;
 import net.deepstorage.compscan.Compressor.CompressionInfo;
@@ -34,13 +36,6 @@ import net.deepstorage.compscan.FileScanner.NoNextFileException;
  * @version 1.0
  */
 public class CompScan {
-	// Valid file extensions.
-	public static final String[] VALID_EXTENSIONS = {
-			"txt",
-			"vhd",
-			"vhdx",
-			"vmdk"
-	};
 	// Symbolic constant representing unthrottled IO rate.
 	public static final double UNLIMITED = 0.0;
 	// Subpackage prefix for the compression package.
@@ -55,8 +50,9 @@ public class CompScan {
 	private double ioRate;
 	private Path pathIn;
 	private Path pathOut;
-	private ScanMode scanMode;
-	private int blockSize;
+   private ScanMode scanMode;
+   Object scanModeArg;
+   private int blockSize;
 	private int superblockSize;
 	private int bufferSize;
 	private boolean overwriteOK;
@@ -75,8 +71,9 @@ public class CompScan {
 		ioRate = UNLIMITED;
 		pathIn = null;
 		pathOut = null;
-		scanMode = ScanMode.NORMAL;
-		blockSize = 0;
+      scanMode = ScanMode.NORMAL;
+      scanModeArg = null;
+      blockSize = 0;
 		superblockSize = 0;
 		bufferSize = ONE_MB;
 		overwriteOK = false;
@@ -108,9 +105,11 @@ public class CompScan {
 	 * @param printUsage Whether or not to include estimated memory usage in console output.
 	 * @throws Exception if called more than once.
 	 */
-	void setup(double ioRate, Path pathIn, Path pathOut, ScanMode scanMode, int blockSize, int superblockSize,
-			int bufferSize, boolean overwriteOK, Compressor compressor, boolean printHashes, boolean verbose,
-			boolean printUsage) {
+	void setup(
+      double ioRate, Path pathIn, Path pathOut, ScanMode scanMode, Object scanModeArg,
+	   int blockSize, int superblockSize, int bufferSize, boolean overwriteOK, 
+	   Compressor compressor, boolean printHashes, boolean verbose, boolean printUsage
+	){
 		if (setupLock) {
 			System.err.println("CompScan.setup cannot be called more than once.");
 			System.exit(1);
@@ -119,6 +118,7 @@ public class CompScan {
 		this.pathIn = pathIn;
 		this.pathOut = pathOut;
 		this.scanMode = scanMode;
+      this.scanModeArg=scanModeArg;
 		this.blockSize = blockSize;
 		this.superblockSize = superblockSize;
 		this.bufferSize = bufferSize;
@@ -133,7 +133,7 @@ public class CompScan {
 	/**
 	 * Run scan.
 	 */
-	private void run() {
+	void run() {
 		System.out.format("Starting run.%n%n");
 
 		Results results = new Results(pathOut.getFileName().toString(), date);
@@ -148,7 +148,7 @@ public class CompScan {
 			   pathIn, blockSize, bufferSize, ioRate, compressor, results, hashCounter, verbose
 		   );
 			cdt.start();
-			fs.scan();
+         fs.scanCombined();
 			if (printHashes) {
 				results.printHashes();
 			}
@@ -190,7 +190,7 @@ public class CompScan {
 	/**
 	 * Run VMDK-mode scan.
 	 */
-	private void runVMDKMode() {
+	void runFiles(Predicate<Path> fileFilter) {
 		System.out.format("Starting run.%n%n");
 		
 		Results totals = new Results(pathOut.getFileName().toString(), date);
@@ -205,7 +205,7 @@ public class CompScan {
 		try {
 			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, totals, hashCounter, verbose);
 			cdt.start();
-			fs.scanVMDKMode(allResults, this, printHashes);
+         fs.scanSeparate(allResults, this, fileFilter, printHashes);
 		} catch (IOException e) {
 			System.err.format("A filesystem IO error ocurred.%n%n");
 			e.printStackTrace();
@@ -227,7 +227,7 @@ public class CompScan {
 		}
 		
 		// Save results.
-		String resultString = makeVMDKResultString(allResults, totals);
+		String resultString = makeFileResultString(allResults, totals);
 		try {
 			writeResults("totals.csv", resultString, overwriteOK);
 			System.out.println(
@@ -248,7 +248,7 @@ public class CompScan {
 	 * @param allResults List of Results objects containing the intermediate results.
 	 * @param totals Results object containing the aggregate results.
 	 */
-	public String makeVMDKResultString(List<Results> allResults, Results totals) {
+	public String makeFileResultString(List<Results> allResults, Results totals) {
 		List<String> lines = new LinkedList<>();
 		lines.add(totals.makeHeadingString());
 		lines.addAll(
@@ -320,24 +320,30 @@ public class CompScan {
 	 */
 	public static void printHelp(String custom) {
 		System.out.format(
-				"Usage: CompScan [-h] [--help] [--vmdk] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
-			    + "                pathIn pathOut blockSize superblockSize format%n"
+            "Usage: CompScan [-h] [--help] [--mode (NORMAL|BIG <size>|VMDK)] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
+			   + "                pathIn pathOut blockSize superblockSize format%n"
 				+ "Positional Arguments%n"
-			    + "         pathIn            path to the dataset%n"
+			   + "         pathIn            path to the dataset%n"
 				+ "         pathOut           where to save the output%n"
 				+ "         blockSize         bytes per block%n"
-			    + "         superblockSize    bytes per superblock%n"
+			   + "         superblockSize    bytes per superblock%n"
 				+ "         formatString      compression format to use%n"
-			    + "Optional Arguments%n"
+			   + "Optional Arguments%n"
 				+ "         -h, --help        print this help message%n"
-			    + "         --verbose         enable verbose console feedback (should only be used for debugging)%n"
-				+ "         --usage           enable printing of estimated memory usage (requires wide console)%n"
-			    + "         --vmdk            whether to report individual virtual disks separately%n"
-			    + "         --overwrite       whether overwriting the output file is allowed%n"
+			   + "         --verbose         enable verbose console feedback (should only be used for debugging)%n"
+ 				+ "         --usage           enable printing of estimated memory usage (requires wide console)%n"
+            + "         --mode            scan mode, one of "+Arrays.asList(ScanMode.values())+":%n"
+            + "                           * NORMAL - default, all file tree is processed as single stream%n"
+            + "                           * BIG <size spec> - process files independently, only those%n"
+            + "                             bigger then spec, where <size spec> = <number>[k|m|g]%n"
+            + "                             meaning size in bytes, e.g: 1000, 100k, 100m, 100g%n"
+            + "                           * VMDK - process files independently, only those%n"
+            + "                             with extensions "+ScanMode.VMDK_EXTENSIONS+"%n"
+            + "         --overwrite       whether overwriting the output file is allowed%n"
 				+ "         --rate MB_PER_SEC maximum MB/sec we're allowed to read%n"
-			    + "         --buffer-size BUFFER_SIZE size of the internal read buffer%n"
+			   + "         --buffer-size BUFFER_SIZE size of the internal read buffer%n"
 				+ "         --hashes          print the hash table before exiting; the hashes are never saved to disk%n"
-			    );
+		);
 		// Short-circuits.
 		if (custom != null && custom.length() > 0) {
 			System.out.format("%n" + custom + "%n");
@@ -367,21 +373,10 @@ public class CompScan {
 			System.exit(1);
 		}
 		
-		if (cs.scanMode == ScanMode.VMDK) {
-			cs.runVMDKMode();
-		} else {
-			cs.run();
-		}
+      cs.scanMode.run(cs);
 	}
 	
-	/**
-	 * Nested enumeration for tracking the scan mode.
-	 */
-	public static enum ScanMode {
-		NORMAL, VMDK;
-	}
-	
-	/**
+ /**
 	 * A simple inner class for keeping track of the current hash count.
 	 */
 	public class MutableCounter {

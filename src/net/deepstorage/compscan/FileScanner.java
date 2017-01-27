@@ -7,10 +7,10 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Predicate;
 
 import net.deepstorage.compscan.CompScan.MutableCounter;
 import net.deepstorage.compscan.CompScan.Results;
-import net.deepstorage.compscan.CompScan.ScanMode;
 import net.deepstorage.compscan.Compressor.BufferLengthException;
 import net.deepstorage.compscan.Compressor.CompressionInfo;
 
@@ -73,7 +73,7 @@ public class FileScanner {
 	 * @throws BufferLengthException if the buffer is the wrong size.
 	 * @throws NoNextFileException if file root contains no regular files.
 	 */
-	public void scan() throws IOException, BufferLengthException, NoNextFileException {
+	public void scanCombined() throws IOException, BufferLengthException, NoNextFileException {
 		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(root, verbose), blockSize, bufferSize, ioRate, false)) {
 			if (!fws.hasMore()) {
 				throw new NoNextFileException(
@@ -115,15 +115,17 @@ public class FileScanner {
 	 * @throws BufferLengthException if the buffer is the wrong size.
 	 * @throws NoNextFileException if the file root contains no VMDKs.
 	 */
-	public void scanVMDKMode(List<Results> fileResults, CompScan cs, boolean printHashes)
-			throws IOException, BufferLengthException, NoNextFileException {
+	public void scanSeparate(
+	   List<Results> fileResults, CompScan cs, Predicate<Path> fileFilter, boolean printHashes
+	) throws IOException, BufferLengthException, NoNextFileException {
 		// scanFile will use the local verbose field, so to prevent double printing, always use false for
 		// this walker.
-		try (FileWalker fw = new FileWalker(root, ScanMode.VMDK, false)) {
+      try (FileWalker fw = new FileWalker(root, fileFilter, false)) {
 			if (!fw.hasNext()) {
+new Error().printStackTrace();
 				throw new NoNextFileException(
 						String.format(
-								"FileWalker opened in VMDK mode with root \"%s\" but contains no VMDKs.", root));
+								"FileWalker opened in separate file mode with root \"%s\" but contains no files of specified type.", root));
 			}
 			
 			while (fw.hasNext()) {
@@ -166,7 +168,7 @@ public class FileScanner {
 		
 		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(f, verbose), blockSize, bufferSize, ioRate, true)) {
 			byte[] buffer = new byte[bufferSize];
-			while (fws.hasMore()) {
+			while (fws.hasMore()){
 				buffer = fws.getBytes();
 				Results intermediate = new Results(f.toString(), r.getTimestamp());
 				scanBuffer(buffer, intermediate);

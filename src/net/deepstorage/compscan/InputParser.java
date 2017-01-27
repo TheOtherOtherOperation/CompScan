@@ -17,8 +17,6 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Queue;
 
-import net.deepstorage.compscan.CompScan.ScanMode;
-
 /**
  * CLI parser for CompScan.
  * 
@@ -41,8 +39,9 @@ public class InputParser {
 	private double ioRate;
 	private Path pathIn;
 	private Path pathOut;
-	private ScanMode scanMode;
-	private int blockSize;
+   private ScanMode scanMode;
+   private Object scanModeArg;
+   private int blockSize;
 	private int superblockSize;
 	private String formatString;
 	private int bufferSize;
@@ -104,8 +103,10 @@ public class InputParser {
 		
 		checkPositionals();
 		
-		compScan.setup(ioRate, pathIn, pathOut, scanMode, blockSize, superblockSize, bufferSize, overwriteOK,
-				compressor, printHashes, verbose, printUsage);
+      compScan.setup(
+         ioRate, pathIn, pathOut, scanMode, scanModeArg, blockSize, superblockSize, 
+         bufferSize, overwriteOK, compressor, printHashes, verbose, printUsage
+		);
 		printConfig();
 	}
 	
@@ -214,8 +215,17 @@ public class InputParser {
 			printUsage = true;
 			break;
 		// VMDK mode.
-		case "--vmdk":
-			scanMode = ScanMode.VMDK;
+		case "--mode":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "--mode requires the following mode specifier: NORMAL, BIG, VMDK"
+         );
+         try{
+            scanMode=ScanMode.valueOf(it.next());
+         }
+         catch(Exception e){
+            throw new IllegalArgumentException("bad mode specifier, should be one of "+Arrays.asList(ScanMode.values()));
+         }
+         scanModeArg=scanMode.parseArg(it);
 			break;
 		// IO rate.
 		case "--rate":

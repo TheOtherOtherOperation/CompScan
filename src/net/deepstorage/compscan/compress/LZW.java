@@ -31,10 +31,10 @@ public class LZW implements CompressionInterface{
       }
       
       private final int key(byte b){
-         return code+(b<<24);
+         return (code<<8)|(b&0xff);
       }
       private final int hash(byte b){
-         return hash*311+b;
+         return (hash*317+b)*317;
       }
       
       public String toString(){
@@ -43,7 +43,7 @@ public class LZW implements CompressionInterface{
    }
    
    private final Node[] table=new Node[TABLE_SIZE];
-   private final IntMap indexMap=new IntMap(TABLE_SIZE*3);
+   private final IntMap indexMap=new IntMap(TABLE_SIZE*4);
    
    final Node rootNode=new Node();
    
@@ -98,20 +98,24 @@ public class LZW implements CompressionInterface{
       return currentCode++;
    }
    
+   static int runs;
+   
    public static void main(String[] args) throws Exception{
       LZW lzw=new LZW();
-      byte[] data=new byte[40];
+      byte[] data=new byte[2000];
       for(int i=1;i<data.length;i++) data[i]=(byte)(i+data[i-1]*37);
       
       byte[] cdata=lzw.compress(data, data.length);
       System.out.println("compression: "+data.length+" -> "+cdata.length);
       
       //heat up
-//      byte[] tmp=new byte[10];
+      byte[] tmp=new byte[10];
 //      for(int i=30000;i-->0;) lzw.compress(tmp,tmp.length);
       
+      runs=0;
       Runnable r=new Runnable(){ public void run(){
          lzw.compress(data,data.length);
+         runs++;
       }};
       System.out.println("LZW speed: "+(SpeedTest.run(r)*data.length)+" B/s");
       System.out.println("currentCode: "+lzw.currentCode);

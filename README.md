@@ -2,37 +2,64 @@
 
 CompScan is a tool for analyzing the compressibility of a datastore.
 
-A typical use might look like this:
-    java CompScan C:\inputDir C:\output.csv 4096 16384 LZW
-Alternately, if running from a JAR:
-	java -jar CompScan.jar C:\inputDir C:\output.csv 4096 16384 LZW
+A typical looks like this:
+    
+    java -cp <classpath> net.deepstorage.compscan.CompScan <arguments>
 
+where <classpath> consists of paths to lz4.jar and CompScan.jar and separated by system-specific separator
+
+Alternately, if running from a JAR:
+   
+   java -cp <path to lz4.jar> -jar CompScan.jar <arguments>
+
+The <arguments> part is described below.
+The lz4.jar can be found in the 'lib' directory.
+
+#Examples.
+
+Windows:
+   
+D:\CompScan>java -cp lib/lz4-1.3.jar;CompScan.jar net.deepstorage.compscan.CompScan --mode BIG 1200m C:\inputDir C:\outputDir 4096 16384 LZ4
+D:\CompScan>java -cp lib/lz4-1.3.jar -jar CompScan.jar --mode BIG 1200m C:\inputDir C:\outputDir 4096 16384 LZ4
+
+Linux:
+~/CompScan>java -cp lib/lz4-1.3.jar:CompScan.jar net.deepstorage.compscan.CompScan --mode BIG 1200m /etc/inputDir /etc/outputDir 4096 16384 LZ4
+~/CompScan>java -cp lib/lz4-1.3.jar.jar -jar CompScan.jar --mode BIG 1200m /etc/inputDir /etc/outputDir 4096 16384 LZ4
+   
 Here:
     datastore location: C:\inputDir
-    output location: C:\output.csv
+    output location: C:\outputDir
     block size: 4096
     superblock size: 16384
-    compression scheme: LZW
+    compression scheme: LZ4
+    mode: separate files bigger than 1200 megabytes
 
 ## Arguments
 ```
-Usage: CompScan [-h] [--help] [--vmdk] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE] pathIn pathOut blockSize superblockSize format
+Usage: CompScan [-h] [--help] [--mode [NORMAL|BIG <size>|VMDK]] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE] pathIn pathOut blockSize superblockSize format
 Positional Arguments
     pathIn            path to the dataset
     pathOut           where to save the output
     blockSize         bytes per block
     superblockSize    bytes per superblock (must be an even multiple of block size)
     formatString      compression format to use
-Optional Arguments
-    -h, --help        print this help message
-	--verbose         enable verbose console feedback (should only be used for debugging)
-	--usage           enable printing of estimated memory usage (requires wide console)
-    --vmdk            whether to report individual virtual disks separately
-    --overwrite       whether overwriting the output file is allowed
-    --rate MB_PER_SEC maximum MB/sec we're allowed to read
-    --buffer-size BUFFER_SIZE size of the internal read buffer, will be rounded up to the next even multiple of the superblock size
-    --hashes          print the hash table before exiting; the hashes are never saved to disk
 ```
+Optional Arguments
+   -h, --help        print this help message
+   --verbose         enable verbose console feedback (should only be used for debugging)
+   --usage           enable printing of estimated memory usage (requires wide console)
+   --mode            scan mode, one of [NORMAL, BIG, VMDK]:
+                     * NORMAL - default, all file tree is processed as a single stream
+                     * BIG <size spec> - process files independently, only those
+                       bigger then spec, where <size spec> = <number>[k|m|g]
+                       meaning size in bytes, e.g: 1000, 100k, 100m, 100g
+                     * VMDK - process files independently, only those
+                       with extensions [txt, vhd, vhdx, vmdk]
+   --overwrite       whether overwriting the output file is allowed
+   --rate MB_PER_SEC maximum MB/sec we're allowed to read
+   --buffer-size BUFFER_SIZE size of the internal read buffer
+   --hashes          print the hash table before exiting; the hashes are never saved to disk
+
 
 ## Memory Considerations
 
