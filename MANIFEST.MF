@@ -1,4 +1,0 @@
-Manifest-Version: 1.0
-Class-Path: ./lib/lz4-1.3.jar
-Main-Class: net.deepstorage.compscan.CompScan
-

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="CompScan" default="build" basedir="."> 
+	<property name="tmpDir" value="tmp"/>
+	<property name="srcDir" value="src"/>
+	<property name="libDir" value="lib"/>
+	
+    <target name="compile">
+        <mkdir dir="${tmpDir}"/>
+        <mkdir dir="${tmpDir}/classes"/>
+
+        <javac srcdir="${srcDir}" destdir="${tmpDir}/classes" 
+        	   target="1.8" encoding="UTF8" debug="on" debuglevel="source,lines">
+            <classpath id="classpath">
+                <fileset dir="lib" includes="*.jar"/>
+            </classpath>
+        </javac>
+        <copy todir="${tmpDir}/classes" overwrite="true">
+            <fileset dir="${srcDir}" excludes="**/*.java"/>
+        </copy>
+    </target>
+	
+    <target name="build" depends="compile">
+        <jar basedir="${tmpDir}/classes" destfile="CompScan.jar">
+            <include name="**"/>
+        </jar>
+        
+        <!--
+    	<mkdir dir="${tmpDir}/META-INF" />
+        <copy todir="${tmpDir}/META-INF" overwrite="true">
+            <fileset dir="${srcDir}" includes="application.xml"/>
+            <fileset dir="${srcDir}" includes="persistence.xml"/>
+        </copy>
+        <mkdir dir="${tmpDir}/lib" />
+        <copy todir="${tmpDir}/lib" overwrite="true">
+            <fileset dir="${libDir}" includes="mysql-connector-java-5.0.8-bin.jar"/>
+        </copy>
+		<jar basedir="${tmpDir}" destfile="${tmpDir}/jboss-test.ear">
+            <include name="services.jar"/>
+            <include name="test.war"/>
+            <include name="META-INF/**"/>
+            <include name="lib/**"/>
+        </jar>
+        -->
+    	
+        <delete dir="${tmpDir}/classes"/>
+        <delete dir="${tmpDir}/lib"/>
+        <delete dir="${tmpDir}/META-INF"/>
+    </target>
+	
+</project>
