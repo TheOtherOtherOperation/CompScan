@@ -20,30 +20,12 @@
     </target>
 	
     <target name="build" depends="compile">
-        <jar basedir="${tmpDir}/classes" destfile="CompScan.jar">
+        <jar basedir="${tmpDir}/classes" destfile="CompScan.jar"
+        	manifest="${srcDir}/META-INF/MANIFEST.MF">
             <include name="**"/>
         </jar>
         
-        <!--
-    	<mkdir dir="${tmpDir}/META-INF" />
-        <copy todir="${tmpDir}/META-INF" overwrite="true">
-            <fileset dir="${srcDir}" includes="application.xml"/>
-            <fileset dir="${srcDir}" includes="persistence.xml"/>
-        </copy>
-        <mkdir dir="${tmpDir}/lib" />
-        <copy todir="${tmpDir}/lib" overwrite="true">
-            <fileset dir="${libDir}" includes="mysql-connector-java-5.0.8-bin.jar"/>
-        </copy>
-		<jar basedir="${tmpDir}" destfile="${tmpDir}/jboss-test.ear">
-            <include name="services.jar"/>
-            <include name="test.war"/>
-            <include name="META-INF/**"/>
-            <include name="lib/**"/>
-        </jar>
-        -->
-    	
         <delete dir="${tmpDir}/classes"/>
-        <delete dir="${tmpDir}/lib"/>
         <delete dir="${tmpDir}/META-INF"/>
     </target>
 	
