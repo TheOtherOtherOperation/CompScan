@@ -1,8 +1,6 @@
 package net.deepstorage.compscan.compress;
 
 import net.deepstorage.compscan.CompressionInterface;
-import java.io.*;
-import java.util.Arrays;
 
 public class LZW implements CompressionInterface{
    static final int TABLE_SIZE=1<<12;
@@ -109,7 +107,7 @@ public class LZW implements CompressionInterface{
       System.out.println("compression: "+data.length+" -> "+cdata.length);
       
       //heat up
-      byte[] tmp=new byte[10];
+//      byte[] tmp=new byte[10];
 //      for(int i=30000;i-->0;) lzw.compress(tmp,tmp.length);
       
       runs=0;

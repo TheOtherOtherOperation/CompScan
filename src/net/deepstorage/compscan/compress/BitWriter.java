@@ -1,6 +1,5 @@
 package net.deepstorage.compscan.compress;
 
-import java.io.*;
 import java.util.Arrays;
 
 public class BitWriter{
@@ -44,7 +43,6 @@ public class BitWriter{
    }
    
    public byte[] toArray(){
-      byte[] buf=new byte[bufSize];
       return Arrays.copyOf(buffer,bufSize);
    }
    
