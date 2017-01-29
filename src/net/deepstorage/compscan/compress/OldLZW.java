@@ -22,7 +22,11 @@ import net.deepstorage.compscan.CompressionInterface;
  */
 public class OldLZW implements CompressionInterface {
 	@Override
-	public byte[] compress(byte[] data, int blockSize) {
+   public void setOptions(String s){
+      //noop
+   }
+   
+   public byte[] compress(byte[] data, int blockSize) {
 		// Build the dictionary.
         int dictSize = 256;
         Map<String,Byte> dictionary = new HashMap<String,Byte>();

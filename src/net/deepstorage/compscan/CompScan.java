@@ -320,15 +320,18 @@ public class CompScan {
 	 */
 	public static void printHelp(String custom) {
 		System.out.format(
-            "Usage: CompScan [-h] [--help] [--mode (NORMAL|BIG <size>|VMDK)] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
-			   + "                pathIn pathOut blockSize superblockSize format%n"
+            "Usage: CompScan [-h] [--help] [--mode (NORMAL|BIG <size>|VMDK)] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE] "
+			   + " pathIn pathOut blockSize superblockSize format[:<options>]%n"
 				+ "Positional Arguments%n"
 			   + "         pathIn            path to the dataset%n"
 				+ "         pathOut           where to save the output%n"
 				+ "         blockSize         bytes per block%n"
 			   + "         superblockSize    bytes per superblock%n"
-				+ "         formatString      compression format to use%n"
-			   + "Optional Arguments%n"
+            + "         format            compression format to use, currently%n"
+            + "                           includes None,LZ4,GZIP,LZW;%n"
+            + "         format options    for LZ4: compression level, number 0 - 17, default 9%n"
+            + "                           for GZIP: compression level, number 1 - 9, default 6%n"
+      + "Optional Arguments%n"
 				+ "         -h, --help        print this help message%n"
 			   + "         --verbose         enable verbose console feedback (should only be used for debugging)%n"
  				+ "         --usage           enable printing of estimated memory usage (requires wide console)%n"

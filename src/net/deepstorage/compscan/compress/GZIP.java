@@ -14,7 +14,7 @@ public class GZIP implements CompressionInterface{
    private final GZIPOutputStream gzip;
    private Deflater deflater;
    
-   public GZIP(int level){
+   public GZIP(){
       try{
          gzip=new GZIPOutputStream(buffer){{
             deflater=def;
@@ -23,7 +23,26 @@ public class GZIP implements CompressionInterface{
       catch(IOException e){ //never happen anyway
          throw new Error(e);
       }
+   }
+   
+   public GZIP(int level){
+      this();
       deflater.setLevel(level);
+   }
+   
+   public void setOptions(String s){
+      try{
+         int lvl=Integer.parseInt(s);
+         if(lvl<BEST_SPEED || lvl>BEST_COMPRESSION) throw new IllegalArgumentException(
+            "Wrong level: "+lvl+", expect "+BEST_SPEED+" to "+BEST_COMPRESSION
+         );
+         deflater.setLevel(lvl);
+      }
+      catch(NumberFormatException e){
+         throw new IllegalArgumentException(
+            "Wrong option to LZ4 compressor: "+s+", expect number 0 to 17"
+         );
+      }
    }
    
    public byte[] compress(byte[] data, int blockSize) throws BufferLengthException{

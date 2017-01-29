@@ -61,6 +61,10 @@ public class LZW implements CompressionInterface{
       for(int i=0;i<256;i++) rootNode.add((byte)i);
    }
    
+   public void setOptions(String s){
+      //
+   }
+   
    public byte[] compress(byte[] data, int blockSize){
 //      resetTable(); //???
       bitWriter.reset();

@@ -58,8 +58,10 @@ public class Compressor {
 			throw new IllegalArgumentException("Format string cannot be null or empty string.");
 		}
 		this.formatString = formatString;
-		try {
-			compressionInterface = getCompressionInterface(formatString);
+      String[] formatParts=formatString.split(":");
+      try {
+         compressionInterface = getCompressionInterface(formatParts[0]);
+         if(formatParts.length>1) compressionInterface.setOptions(formatParts[1]);
 			System.out.println(String.format("Using compression interface \"%s\".%n", formatString));
 		} catch (ClassNotFoundException e) {
 			throw new IllegalArgumentException(

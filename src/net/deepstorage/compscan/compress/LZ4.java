@@ -10,21 +10,42 @@ public class LZ4 implements CompressionInterface{
    
    private final static LZ4Factory factory=LZ4Factory.fastestInstance();
    
-   private final LZ4Compressor compressor;
+   private int level=-1;
+   private LZ4Compressor compressor;
    
    public LZ4(){
       this(LVL_NORMAL);
    }
    
    public LZ4(int level){
-      if(level<0) throw new IllegalArgumentException();
-      if(level>LVL_MAX) throw new IllegalArgumentException();
-      if(level==0) compressor=factory.fastCompressor();
-      else compressor=factory.highCompressor(level);
+      setLevel(level);
+   }
+   
+   public void setOptions(String s){
+      try{
+         setLevel(Integer.parseInt(s));
+      }
+      catch(NumberFormatException e){
+         throw new IllegalArgumentException(
+            "Wrong option to LZ4 compressor: "+s+", expect number 0 to 17"
+         );
+      }
+   }
+   
+   private void setLevel(int level){
+      if(level<0 || level>LVL_MAX) throw new IllegalArgumentException("Wrong level: "+level+", expect 0 to "+LVL_MAX);
+      if(level!=this.level) compressor=null;
+      this.level=level;
+   }
+   
+   private LZ4Compressor getCompressor(){
+      if(compressor!=null) return compressor;
+      compressor= level==0? factory.fastCompressor(): factory.highCompressor(level);
+      return compressor;
    }
    
    public byte[] compress(byte[] data, int blockSize){
-      return compressor.compress(data);
+      return getCompressor().compress(data);
    }
    
    public static void main(String[] args) throws Exception{

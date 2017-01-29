@@ -16,7 +16,11 @@ import net.deepstorage.compscan.CompressionInterface;
  * @version 1.0
  */
 public class None implements CompressionInterface {
-	@Override
+   public void setOptions(String s){
+      //noop
+   }
+   
+   @Override
 	public byte[] compress(byte[] data, int blockSize) {
 		// TODO Auto-generated method stub
 		return data;

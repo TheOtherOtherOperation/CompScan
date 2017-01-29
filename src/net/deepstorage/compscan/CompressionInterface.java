@@ -16,7 +16,9 @@ import net.deepstorage.compscan.Compressor.BufferLengthException;
  * @author Ramon A. Lovato
  * @version 1.0
  */
-public interface CompressionInterface {
+public interface CompressionInterface{
+   public void setOptions(String s);
+   
 	/**
 	 * Compress the data. This is the only method necessary for a compression algorithm to
 	 * interface with CompScan. It should take an array of bytes, one superblock in size,

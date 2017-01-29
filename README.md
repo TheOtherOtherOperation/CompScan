@@ -36,13 +36,16 @@ Here:
 
 ## Arguments
 ```
-Usage: CompScan [-h] [--help] [--mode [NORMAL|BIG <size>|VMDK]] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE] pathIn pathOut blockSize superblockSize format
+Usage: CompScan [-h] [--help] [--mode [NORMAL|BIG <size>|VMDK]] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE] pathIn pathOut blockSize superblockSize format[:<options>]
 Positional Arguments
     pathIn            path to the dataset
     pathOut           where to save the output
     blockSize         bytes per block
     superblockSize    bytes per superblock (must be an even multiple of block size)
-    formatString      compression format to use
+    formatString      compression format to use, 
+                      currently includes None,LZ4,GZIP,LZW
+    format options    for LZ4: compression level 0 - 17, default 9
+                      for GZIP: compression level 1 - 9, default 6
 ```
 Optional Arguments
    -h, --help        print this help message
