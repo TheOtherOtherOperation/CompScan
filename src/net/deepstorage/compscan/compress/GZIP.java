@@ -13,8 +13,14 @@ public class GZIP implements CompressionInterface{
    private final ByteArrayOutputStream buffer=new ByteArrayOutputStream();
    private final GZIPOutputStream gzip;
    private Deflater deflater;
+   private final int level;
    
    public GZIP(){
+      this(6);
+   }
+   
+   public GZIP(int level){
+      if(level<1 || level>9) throw new IllegalArgumentException(""+level);
       try{
          gzip=new GZIPOutputStream(buffer){{
             deflater=def;
@@ -23,11 +29,7 @@ public class GZIP implements CompressionInterface{
       catch(IOException e){ //never happen anyway
          throw new Error(e);
       }
-   }
-   
-   public GZIP(int level){
-      this();
-      deflater.setLevel(level);
+      deflater.setLevel(this.level=level);
    }
    
    public void setOptions(String s){
@@ -56,6 +58,10 @@ public class GZIP implements CompressionInterface{
          throw new Error(e);
       }
       return buffer.toByteArray();
+   }
+   
+   public String toString(){
+      return "GZIP:"+level;
    }
    
    public static void main(String[] args) throws Exception{

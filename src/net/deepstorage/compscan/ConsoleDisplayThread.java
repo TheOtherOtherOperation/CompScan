@@ -10,6 +10,12 @@ package net.deepstorage.compscan;
 import net.deepstorage.compscan.CompScan.MutableCounter;
 import net.deepstorage.compscan.CompScan.Results;
 
+import java.util.Date;
+import java.io.*;
+import java.text.*;
+import java.nio.file.Path;
+
+
 /**
  * Provides interactive console output for CompScan.
  * 
@@ -17,28 +23,42 @@ import net.deepstorage.compscan.CompScan.Results;
  * @version 1.0
  */
 public class ConsoleDisplayThread extends Thread {
+   private static final DateFormat df=new SimpleDateFormat("MM/dd/yy HH:mm:ss");
+   
 	private Results results;
 	private String lastString;
 	private long startTime;
 	private long elapsedTime;
 	private MutableCounter hashCounter;
 	private boolean printUsage;
+   private Path logFile;
+   private PrintWriter log;
 	
 	/**
 	 * Constructor.
 	 * 
 	 * @param results Results object for which to display output.
 	 */
-	public ConsoleDisplayThread(Results results, MutableCounter hashCounter, boolean printUsage) {
+	public ConsoleDisplayThread(
+	   Results results, MutableCounter hashCounter, boolean printUsage,
+      Path logFile
+	){
 		this.results = results;
 		this.hashCounter = hashCounter;
 		lastString = "";
 		startTime = System.currentTimeMillis();
 		this.printUsage = printUsage;
+      this.logFile=logFile;
 	}
 
 	@Override
-	public void run() {
+	public void run(){
+      if(logFile!=null) try{
+         log=new PrintWriter(new FileWriter(logFile.toFile()), true);
+      }
+      catch(IOException e){
+         System.out.println("WARNING: couldn't open the log file: "+logFile);
+      }
 		while (!isInterrupted()) {
 			try {
 				sleep(1000);
@@ -50,6 +70,10 @@ public class ConsoleDisplayThread extends Thread {
 			printProgress();
 		}
 		System.out.println();
+		if(log!=null) try{
+		   log.close();
+		}
+		catch(Exception ignore){}
 	}
 	
 	/**
@@ -101,5 +125,6 @@ public class ConsoleDisplayThread extends Thread {
 				usageString);
 		lastString = s;
 		System.out.print(s);
+		if(log!=null) log.println("["+df.format(new Date())+"] "+s);
 	}
 }

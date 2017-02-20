@@ -14,6 +14,8 @@ import net.deepstorage.compscan.CompScan.Results;
 import net.deepstorage.compscan.Compressor.BufferLengthException;
 import net.deepstorage.compscan.Compressor.CompressionInfo;
 
+import net.deepstorage.compscan.util.*;
+
 /**
  * The FileScanner class abstracts the necessary behavior for walking a file tree.
  * 
@@ -81,7 +83,8 @@ public class FileScanner {
 								"FileWalkerStream with root \"%s\" contains no scannable data.", root));
 			}
 			scanStream(fws, totals);
-		} catch (IOException ex) {
+		}
+		catch (IOException ex){
 			throw ex;
 		}
 	}
@@ -95,12 +98,19 @@ public class FileScanner {
 	 * @throws BufferLengthException if the buffer is the wrong size.
 	 */
 	private void scanStream(FileWalkerStream fws, Results r) throws IOException, BufferLengthException {
-		while (fws.hasMore()) {
+      JobGroup jg=new JobGroup();
+		while(fws.hasMore()){
 			byte[] buffer = fws.getBytes();
-			scanBuffer(buffer, r);
-			r.set("files read", fws.getFilesRead());
-			hashCounter.setCount(r.getHashes().size());
-		}
+			Executor.exec(jg.addJob(new Runnable(){public void run(){
+            scanBuffer(buffer, r);
+            synchronized(FileScanner.this){
+               r.set("files read", fws.getFilesRead());
+               hashCounter.setCount(r.getHashes().size());
+            }
+         }}));
+      }
+      jg.waitAll();
+      Executor.shutdown();
 	}
 	
 	/**
@@ -115,37 +125,34 @@ public class FileScanner {
 	 * @throws BufferLengthException if the buffer is the wrong size.
 	 * @throws NoNextFileException if the file root contains no VMDKs.
 	 */
-	public void scanSeparate(
+	public void scanSeparately(
 	   List<Results> fileResults, CompScan cs, Predicate<Path> fileFilter, boolean printHashes
 	) throws IOException, BufferLengthException, NoNextFileException {
 		// scanFile will use the local verbose field, so to prevent double printing, always use false for
 		// this walker.
       try (FileWalker fw = new FileWalker(root, fileFilter, false)) {
-			if (!fw.hasNext()) {
-new Error().printStackTrace();
+			if (!fw.hasNext()){
 				throw new NoNextFileException(
 						String.format(
 								"FileWalker opened in separate file mode with root \"%s\" but contains no files of specified type.", root));
 			}
-			
-			while (fw.hasNext()) {
+			while(fw.hasNext()){
 				Path f = fw.next();
 				Results r = new Results(f.toString(), totals.getTimestamp());
 				r.set("block size", totals.get("block size"));
 				r.set("superblock size", totals.get("superblock size"));
 				hashCounter.resetCount();
 				scanFile(f, r);
-				r.set("files read", 1L);
-				
-				cs.writeHashResults(r, f);
-				if (printHashes) {
-					r.printHashes();
-				}
-				r.releaseHashes();
-				
-				fileResults.add(r);
+			   r.set("files read", 1L);
+            cs.writeHashResults(r, f);
+            if(printHashes){
+               r.printHashes();
+            }
+            r.releaseHashes();
+            fileResults.add(r);
 			}
-		} catch (IOException ex) {
+		}
+		catch(IOException ex){
 			throw ex;
 		}
 	}
@@ -160,23 +167,27 @@ new Error().printStackTrace();
 	 * @throws BufferLengthException if the buffer is the wrong size.
 	 */
 	private void scanFile(Path f, Results r) throws IOException, BufferLengthException {
-		if (f == null || r == null) {
+		if(f==null || r==null){
 			return;
 		}
-		
-		totals.incrementFilesRead();
-		
-		try (FileWalkerStream fws = new FileWalkerStream(new FileWalker(f, verbose), blockSize, bufferSize, ioRate, true)) {
-			byte[] buffer = new byte[bufferSize];
-			while (fws.hasMore()){
-				buffer = fws.getBytes();
-				Results intermediate = new Results(f.toString(), r.getTimestamp());
-				scanBuffer(buffer, intermediate);
-				r.feedOtherResults(intermediate, intermediate.getHashes());
-				totals.feedOtherResults(intermediate, null);
-				hashCounter.setCount(r.getHashes().size());;
+      totals.incrementFilesRead();
+		try(FileWalkerStream fws = new FileWalkerStream(new FileWalker(f, verbose), blockSize, bufferSize, ioRate, true)) {
+         JobGroup jg=new JobGroup();
+         while (fws.hasMore()){
+            final byte[] buffer = fws.getBytes();
+            final Results intermediate = new Results(f.toString(), r.getTimestamp());
+				Executor.exec(jg.addJob(new Runnable(){public void run(){
+               scanBuffer(buffer, intermediate);
+               synchronized(FileScanner.this){
+                  r.feedOtherResults(intermediate, intermediate.getHashes());
+                  totals.feedOtherResults(intermediate, null);
+                  hashCounter.setCount(r.getHashes().size());;
+               }
+            }
+            }));
 			}
-		}
+         jg.waitAll();
+      }
 	}
 	
 	/**

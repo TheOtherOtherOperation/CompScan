@@ -58,10 +58,11 @@ public class CompScan {
 	private boolean overwriteOK;
 	private Compressor compressor;
 	private boolean printHashes;
-	private boolean verbose;
-	private MutableCounter hashCounter;
+   private boolean verbose;
+   private MutableCounter hashCounter;
 	private boolean printUsage;
-	
+   private Path logPath;
+    
 	/**
 	 * Default constructor.
 	 * 
@@ -108,7 +109,8 @@ public class CompScan {
 	void setup(
       double ioRate, Path pathIn, Path pathOut, ScanMode scanMode, Object scanModeArg,
 	   int blockSize, int superblockSize, int bufferSize, boolean overwriteOK, 
-	   Compressor compressor, boolean printHashes, boolean verbose, boolean printUsage
+      Compressor compressor, boolean printHashes, boolean verbose, boolean printUsage,
+      Path logPath
 	){
 		if (setupLock) {
 			System.err.println("CompScan.setup cannot be called more than once.");
@@ -127,6 +129,7 @@ public class CompScan {
 		this.printHashes = printHashes;
 		this.verbose = verbose;
 		this.printUsage = printUsage;
+      this.logPath=logPath;
 		setupLock = true;
 	}
 	
@@ -141,7 +144,7 @@ public class CompScan {
 		results.set("superblock size", superblockSize);
 		
 		hashCounter = new MutableCounter();
-		ConsoleDisplayThread cdt = new ConsoleDisplayThread(results, hashCounter, printUsage);
+		ConsoleDisplayThread cdt = new ConsoleDisplayThread(results, hashCounter, printUsage, logPath);
 
 		try {
 			FileScanner fs = new FileScanner(
@@ -200,27 +203,27 @@ public class CompScan {
 		List<Results> allResults = new LinkedList<>();
 		
 		hashCounter = new MutableCounter();
-		ConsoleDisplayThread cdt = new ConsoleDisplayThread(totals, hashCounter, printUsage);
+      ConsoleDisplayThread cdt = new ConsoleDisplayThread(totals, hashCounter, printUsage, logPath);
 		
-		try {
+		try{
 			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, totals, hashCounter, verbose);
 			cdt.start();
-         fs.scanSeparate(allResults, this, fileFilter, printHashes);
-		} catch (IOException e) {
+         fs.scanSeparately(allResults, this, fileFilter, printHashes);
+		}catch (IOException e) {
 			System.err.format("A filesystem IO error ocurred.%n%n");
 			e.printStackTrace();
 			System.exit(1);
-		} catch (BufferLengthException e) {
+		}catch (BufferLengthException e) {
 			System.err.format("The input buffer is the wrong size.%n%n");
 			e.printStackTrace();
 			System.exit(1);
-		} catch (NoNextFileException e) {
+		}catch (NoNextFileException e) {
 			System.err.println(e.getMessage());
 			System.exit(1);
 		}
 		
 		cdt.interrupt();
-		try {
+		try{
 			cdt.join();
 		} catch (InterruptedException e) {
 			// Nothing to do.
@@ -343,7 +346,8 @@ public class CompScan {
             + "                           * VMDK - process files independently, only those%n"
             + "                             with extensions "+ScanMode.VMDK_EXTENSIONS+"%n"
             + "         --overwrite       whether overwriting the output file is allowed%n"
-				+ "         --rate MB_PER_SEC maximum MB/sec we're allowed to read%n"
+            + "         --report <file>   print progress info to the file%n"
+            + "         --rate MB_PER_SEC maximum MB/sec we're allowed to read%n"
 			   + "         --buffer-size BUFFER_SIZE size of the internal read buffer%n"
 				+ "         --hashes          print the hash table before exiting; the hashes are never saved to disk%n"
 		);
@@ -365,7 +369,8 @@ public class CompScan {
 	 * 
 	 * @param args CLI arguments.
 	 */
-	public static void main(String[] args) {
+	public static void main(String[] args) throws Exception{
+System.in.read();
 		CompScan cs = null;
 		try {
 			cs = new CompScan(args);
@@ -424,7 +429,7 @@ public class CompScan {
 		private final String name;
 		private final String timestamp;
 		private Map<String, Long> map;
-		private Map<String, Long> hashes;
+		private Map<Object, Long> hashes;
 		
 		/**
 		 * Convenience constructor for creating a new Results object from a name
@@ -460,8 +465,9 @@ public class CompScan {
 		 * @param k Map key to update.
 		 * @param v Value to assign to the key.
 		 */
-		public void set(String k, long v) {
-			if (!map.containsKey(k)) {
+      public synchronized void set(String k, long v) {
+//public void set(String k, long v) {
+         if (!map.containsKey(k)) {
 				throw new IllegalArgumentException("Invalid key \"" + k + "\".");
 			}
 			map.put(k, v);
@@ -473,8 +479,9 @@ public class CompScan {
 		 * @param k Map key to retrieve.
 		 * @return Value assigned to the key.
 		 */
-		public long get(String k) {
-			if (!map.containsKey(k)) {
+      public synchronized long get(String k) {
+//public long get(String k) {
+         if (!map.containsKey(k)) {
 				throw new IllegalArgumentException("Invalid key \"" + k + "\".");
 			}
 			return map.get(k);
@@ -496,8 +503,9 @@ public class CompScan {
 		 * @param hash Sha-1 hash to update.
 		 * @param count Number to add to the hash counter.
 		 */
-		public void updateHash(String hash, long count) {
-			if (!hashes.containsKey(hash)) {
+      public synchronized void updateHash(Object hash, long count) {
+//public void updateHash(Object hash, long count) {
+         if (!hashes.containsKey(hash)) {
 				hashes.put(hash, count);
 			} else {
 				hashes.put(hash, hashes.get(hash) + count);
@@ -509,11 +517,12 @@ public class CompScan {
 		 * 
 		 * @param h Map<String, Long> containing counters for hash occurrences.
 		 */
-		public void updateHashes(Map<String, Long> h) {
-			if (h == null) {
+      public synchronized void updateHashes(Map<Object, Long> h) {
+//public void updateHashes(Map<Object, Long> h) {
+         if (h == null) {
 				return;
 			}
-			for (Map.Entry<String, Long> e : h.entrySet()) {
+			for (Map.Entry<Object, Long> e : h.entrySet()) {
 				updateHash(e.getKey(), e.getValue());
 			}
 		}
@@ -521,7 +530,7 @@ public class CompScan {
 		/**
 		 * Allows releasing resources for the hash counters.
 		 */
-		public void releaseHashes() {
+      public void releaseHashes() {
 			hashes.clear();
 			System.gc();
 		}
@@ -531,14 +540,15 @@ public class CompScan {
 		 * 
 		 * @param ci CompressionInfo whose data should be added to the results.
 		 */
-		public void feedCompressionInfo(CompressionInfo ci) {
-			addTo("bytes read", ci.bytesRead);
+      public synchronized void feedCompressionInfo(CompressionInfo ci) {
+//public void feedCompressionInfo(CompressionInfo ci) {
+         addTo("bytes read", ci.bytesRead);
 			addTo("blocks read", ci.blocksRead);
 			addTo("superblocks read", ci.superblocksRead);
 			addTo("compressed bytes", ci.compressedBytes);
 			addTo("compressed blocks", ci.compressedBlocks);
 			addTo("actual bytes needed", ci.actualBytes);
-			Map<String, Long> ciHashes = ci.getHashes();
+			Map<Object, Long> ciHashes = ci.getHashes();
 			updateHashes(ciHashes);
 		}
 		
@@ -547,8 +557,9 @@ public class CompScan {
 		 * 
 		 * @param r Results object from which to update.
 		 */
-		public void feedOtherResults(Results r) {
-			feedOtherResults(r, r.hashes);
+      public synchronized void feedOtherResults(Results r) {
+//public void feedOtherResults(Results r) {
+         feedOtherResults(r, r.hashes);
 		}
 		
 		/**
@@ -557,8 +568,9 @@ public class CompScan {
 		 * @param r Results object from which to update.
 		 * @param h Hashes map from which to update hashes.
 		 */
-		public void feedOtherResults(Results r, Map<String, Long> h) {
-			addTo("files read", r.get("files read"));
+      public synchronized void feedOtherResults(Results r, Map<Object, Long> h) {
+//public void feedOtherResults(Results r, Map<Object, Long> h) {
+         addTo("files read", r.get("files read"));
 			addTo("bytes read", r.get("bytes read"));
 			addTo("blocks read", r.get("blocks read"));
 			addTo("superblocks read", r.get("superblocks read"));
@@ -573,8 +585,9 @@ public class CompScan {
 		/**
 		 * Increment the files read counter.
 		 */
-		public void incrementFilesRead() {
-			set("files read", get("files read") + 1);
+      public synchronized void incrementFilesRead() {
+//public void incrementFilesRead() {
+         set("files read", get("files read") + 1);
 		}
 		
 		/**
@@ -582,8 +595,9 @@ public class CompScan {
 		 * 
 		 * @return Compressed bytes / bytes read.
 		 */
-		public double getRawCompressionFactor() {
-			long bytesRead = map.get("bytes read");
+      public synchronized double getRawCompressionFactor() {
+//public synchronized double getRawCompressionFactor() {
+         long bytesRead = map.get("bytes read");
 			if (bytesRead == 0) {
 				return 0.0;
 			}
@@ -595,8 +609,9 @@ public class CompScan {
 		 * 
 		 * @return Actual bytes needed / bytes read.
 		 */
-		public double getSuperblockCompressionFactor() {
-			long bytesRead = map.get("bytes read");
+      public synchronized double getSuperblockCompressionFactor() {
+//public double getSuperblockCompressionFactor() {
+         long bytesRead = map.get("bytes read");
 			if (bytesRead == 0) {
 				return 0.0;
 			}
@@ -608,8 +623,9 @@ public class CompScan {
 		 * 
 		 * @return A CSV-formatted heading string from the map keys.
 		 */
-		public String makeHeadingString() {
-			List<String> headings = new LinkedList<>(map.keySet());
+      public synchronized String makeHeadingString() {
+//public String makeHeadingString() {
+         List<String> headings = new LinkedList<>(map.keySet());
 			headings.add(0, "name");
 			headings.add(1, "timestamp");
 			headings.add("raw compression factor");
@@ -622,8 +638,9 @@ public class CompScan {
 		 * 
 		 * @return A CSV-formatted value string from the map values.
 		 */
-		public String makeValueString() {
-			List<String> values = new LinkedList<>(
+      public synchronized String makeValueString() {
+//public String makeValueString() {
+         List<String> values = new LinkedList<>(
 					map.values()
 					.stream()
 					.map(v -> String.valueOf(v))
@@ -640,8 +657,9 @@ public class CompScan {
 		 * 
 		 * @return A CSV-formatted string for the hash counters.
 		 */
-		public String makeHashCounterString() {			
-			Map<Long, Long> counters = getHashCounters();
+      public synchronized String makeHashCounterString() {        
+//public String makeHashCounterString() {        
+         Map<Long, Long> counters = getHashCounters();
 			
 			List<String> lines = new LinkedList<String>();
 			
@@ -662,11 +680,12 @@ public class CompScan {
 		 * @return Map<Long, Long> in which the key represents the number of repeats and the value
 		 * 		   represents the number of blocks that repeat that number of times.
 		 */
-		public Map<Long, Long> getHashCounters() {
-			Map<Long, Long> counters = new TreeMap<Long, Long>();
+      public synchronized Map<Long, Long> getHashCounters() {
+//public Map<Long, Long> getHashCounters() {
+         Map<Long, Long> counters = new TreeMap<Long, Long>();
 			
-			for (Iterator<Map.Entry<String, Long>> it = hashes.entrySet().iterator(); it.hasNext(); ) {
-				Map.Entry<String, Long> current = it.next();
+			for (Iterator<Map.Entry<Object, Long>> it = hashes.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<Object, Long> current = it.next();
 				long key = current.getValue();
 				long value = (counters.containsKey(key) ? counters.get(key) + 1L : 1L);
 				
@@ -677,7 +696,7 @@ public class CompScan {
 		}
 		
 		@Override
-		public String toString() {			
+      public synchronized String toString() {         
 			return makeHeadingString() + System.lineSeparator() + makeValueString();
 		}
 		
@@ -687,7 +706,7 @@ public class CompScan {
 		 * @param k Map key to add to.
 		 * @param v Value to add to the map value for k.
 		 */
-		private void addTo(String k, long v) {
+      private void addTo(String k, long v) {
 			map.put(k, map.get(k) + v);
 		}
 
@@ -705,7 +724,7 @@ public class CompScan {
 		 * 
 		 * @return The hash counters map.
 		 */
-		public Map<String, Long> getHashes() {
+      public Map<Object, Long> getHashes() {
 			return hashes;
 		}
 		
@@ -714,7 +733,7 @@ public class CompScan {
 		 * 
 		 * @return Formatted string of the hash counters map.
 		 */
-		public String makeHashString() {
+		public synchronized String makeHashString() {
 			return String.join(System.lineSeparator(),
 					hashes.entrySet()
 					.stream()

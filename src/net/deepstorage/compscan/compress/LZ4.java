@@ -48,9 +48,13 @@ public class LZ4 implements CompressionInterface{
       return getCompressor().compress(data);
    }
    
+   public String toString(){
+      return "LZ4:"+level;
+   }
+   
    public static void main(String[] args) throws Exception{
       //LZ4 lz4=new LZ4(LZ4.LVL_FAST);
-      LZ4 lz4=new LZ4();
+      LZ4 lz4=new LZ4(0);
       byte[] data=new byte[2000];
       for(int i=1;i<data.length;i++) data[i]=(byte)(i+data[i-1]*37);
       

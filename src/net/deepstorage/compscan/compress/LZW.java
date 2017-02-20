@@ -100,6 +100,11 @@ public class LZW implements CompressionInterface{
       return currentCode++;
    }
    
+   public String toString(){
+      return "LZW:"+TABLE_SIZE;
+   }
+   
+   
    static int runs;
    
    public static void main(String[] args) throws Exception{

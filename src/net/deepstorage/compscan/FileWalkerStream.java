@@ -8,8 +8,10 @@
 package net.deepstorage.compscan;
 
 import java.io.BufferedInputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 
 /**
  * A filesystem walker data stream for CompScan.
@@ -179,8 +181,9 @@ public class FileWalkerStream implements AutoCloseable {
 			bs.close();
 		}
 		if (walker.hasNext() && !noStep) {
-			bs = new BufferedInputStream(Files.newInputStream(walker.next()), bufferSize);
-		} else {
+//         bs = new BufferedInputStream(Files.newInputStream(walker.next()), bufferSize);
+         bs = new BufferedInputStream(new FileInputStream(walker.next().toFile()), bufferSize);
+      } else {
 			bs = null;
 		}
 	}
@@ -191,4 +194,23 @@ public class FileWalkerStream implements AutoCloseable {
 			bs.close();
 		}
 	}
+	
+	public static void main(String[] args) throws Exception{
+System.in.read();
+	   FileWalkerStream fws=new FileWalkerStream(
+         new FileWalker(Paths.get("../testdata/in"), false), 1000, 100000, CompScan.UNLIMITED, false
+      );
+      if(fws.hasMore()) fws.getBytes();
+      int bytes=0;
+      long t0=System.currentTimeMillis();
+      while(fws.hasMore()){
+         byte[] buf=fws.getBytes();
+         bytes+=buf.length;
+         if((bytes&0xffff)==0) System.out.println(bytes+" bytes read");
+      }
+      long dt=System.currentTimeMillis()-t0;
+      System.out.println("total: "+bytes+" bytes");
+      System.out.println("dt: "+dt);
+      System.out.println("TP: "+(bytes*1000./dt)+" bytes/s");
+   }
 }

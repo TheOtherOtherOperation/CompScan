@@ -3,6 +3,7 @@
 	<property name="tmpDir" value="tmp"/>
 	<property name="srcDir" value="src"/>
 	<property name="libDir" value="lib"/>
+	<property name="jniDir" value="jni"/>
 	
     <target name="compile">
         <mkdir dir="${tmpDir}"/>
@@ -20,6 +21,10 @@
     </target>
 	
     <target name="build" depends="compile">
+        <copy todir="${tmpDir}/classes" overwrite="true">
+            <fileset dir="${jniDir}" includes="lib/**/*.dll"/>
+            <fileset dir="${jniDir}" includes="lib/**/*.so"/>
+        </copy>
         <jar basedir="${tmpDir}/classes" destfile="CompScan.jar"
         	manifest="${srcDir}/META-INF/MANIFEST.MF">
             <include name="**"/>

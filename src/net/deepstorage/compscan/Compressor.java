@@ -165,15 +165,16 @@ public class Compressor {
 		
 		// We want the input data to be exactly one superblock in size. 
 		byte[] compressed = compressionInterface.compress(data, blockSize);
-
 		CompressionInfo ci = new CompressionInfo(data.length, compressed.length, hashBuffer(data));
-		bytesRead += ci.bytesRead;
-		blocksRead += ci.blocksRead;
-		superblocksRead += 1L;
-		compressedBytes += ci.compressedBytes;
-		compressedBlocks += ci.compressedBlocks;
-		actualBytes += ci.actualBytes;
-		return ci;
+		synchronized(this){
+         bytesRead += ci.bytesRead;
+         blocksRead += ci.blocksRead;
+         superblocksRead += 1L;
+         compressedBytes += ci.compressedBytes;
+         compressedBlocks += ci.compressedBlocks;
+         actualBytes += ci.actualBytes;
+         return ci;
+      }
 	}
 	
 	/**
@@ -183,25 +184,27 @@ public class Compressor {
 	 * @return Map<String, Long> with counters of hash codes.
 	 * @throws BufferLengthException if the buffer is the wrong size.
 	 */
-	public Map<String, Long> hashBuffer(byte[] data) throws BufferLengthException {
+	public Map<Object, Long> hashBuffer(byte[] data) throws BufferLengthException {
 		if (data.length != buffer.length) {
 			throw new BufferLengthException(
 					String.format(
 							"Compressor.hashBuffer requires exactly one superblock of data: %1$d bytes given, %2$d bytes expected.",
 							data.length, buffer.length));
 		}
-		Map<String, Long> counters = new HashMap<>();
+		Map<Object, Long> counters = new HashMap<>();
 		// Since the buffer is enforced to be one superblock, an even multiple of block size, we can use simple
 		// iteration.
 		for (int i = 0; i + blockSize <= data.length; i += blockSize) {
 			try {
-				String key = SHA1Encoder.encode(Arrays.copyOfRange(data, i, i + blockSize));
-				if (!counters.containsKey(key)) {
+			   Object key=SHA1Encoder.encode(Arrays.copyOfRange(data, i, i + blockSize));
+				if(!counters.containsKey(key)){
 					counters.put(key, 1L);
-				} else {
+				}
+				else{
 					counters.put(key, counters.get(key) + 1L);
 				}
-			} catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
+			}
+			catch (Exception e) {
 				// Really, this should never happen, since we know the algorithm exists.
 				e.printStackTrace();
 			}
@@ -230,7 +233,7 @@ public class Compressor {
 		public final long compressedBytes;
 		public final long compressedBlocks;
 		public final long actualBytes;
-		private final Map<String, Long> hashes;
+		private final Map<Object, Long> hashes;
 		public final long uniqueHashes;
 		
 		/**
@@ -245,7 +248,7 @@ public class Compressor {
 		 * @param hashes Map<String, Long> of counters for hash codes.
 		 */
 		private CompressionInfo(long bytesRead, long blocksRead, long superblocksRead, long compressedBytes,
-				                long compressedBlocks, long actualBytes, Map<String, Long> hashes) {
+                            long compressedBlocks, long actualBytes, Map<Object, Long> hashes) {
 			this.bytesRead = bytesRead;
 			this.blocksRead = blocksRead;
 			this.superblocksRead = superblocksRead;
@@ -263,7 +266,7 @@ public class Compressor {
 		 * @param compressedBytes Size of the compressed data.
 		 *  * @param hashes Map<String, Long> of counters for hash codes.
 		 */
-		private CompressionInfo(long bytesRead, long compressedBytes, Map<String, Long> hashes) throws BufferLengthException {
+      private CompressionInfo(long bytesRead, long compressedBytes, Map<Object, Long> hashes) throws BufferLengthException {
 			this.bytesRead = bytesRead;
 			this.compressedBytes = compressedBytes;
 			
@@ -282,7 +285,7 @@ public class Compressor {
 		 * 
 		 * @return Map<String, Long> containing the hash counters.
 		 */
-		public Map<String, Long> getHashes() {
+		public Map<Object, Long> getHashes() {
 			return hashes;
 		}
 	}
@@ -290,7 +293,7 @@ public class Compressor {
 	/**
 	 * Nested exception for invalid buffer size.
 	 */
-	public static class BufferLengthException extends Exception {
+	public static class BufferLengthException extends RuntimeException {
 		public BufferLengthException(String message) {
 			super(message);
 		}

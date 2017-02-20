@@ -50,7 +50,8 @@ public class InputParser {
 	private boolean printHashes;
 	private boolean verbose;
 	private boolean printUsage;
-	
+   private Path logPath;
+   
 	/**
 	 * Constructor.
 	 * 
@@ -105,7 +106,7 @@ public class InputParser {
 		
       compScan.setup(
          ioRate, pathIn, pathOut, scanMode, scanModeArg, blockSize, superblockSize, 
-         bufferSize, overwriteOK, compressor, printHashes, verbose, printUsage
+         bufferSize, overwriteOK, compressor, printHashes, verbose, printUsage, logPath
 		);
 		printConfig();
 	}
@@ -228,8 +229,14 @@ public class InputParser {
          scanModeArg=scanMode.parseArg(it);
 			break;
 		// IO rate.
-		case "--rate":
-			if (!it.hasNext()) {
+      case "--log":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "missing file value to the log option"
+         );
+         logPath=Paths.get(it.next());
+         break;
+      case "--rate":
+         if (!it.hasNext()) {
 				throw new IllegalArgumentException(
 						"Reached end of arguments without finding value for rate.");
 			}
