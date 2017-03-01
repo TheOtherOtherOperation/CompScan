@@ -28,6 +28,7 @@ import java.util.function.Predicate;
 import net.deepstorage.compscan.Compressor.BufferLengthException;
 import net.deepstorage.compscan.Compressor.CompressionInfo;
 import net.deepstorage.compscan.FileScanner.NoNextFileException;
+import net.deepstorage.compscan.util.Executor;
 
 /**
  * CompScan's main class.
@@ -371,10 +372,12 @@ public class CompScan {
 	 */
 	public static void main(String[] args) throws Exception{
 System.in.read();
+//Executor.setPoolSize(1);
 		CompScan cs = null;
-		try {
+		try{
 			cs = new CompScan(args);
-		} catch (IllegalArgumentException ex) {
+		}
+		catch (IllegalArgumentException ex) {
 			printHelp(ex.getMessage());
 		}
 		if (cs == null) {

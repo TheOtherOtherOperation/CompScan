@@ -40,11 +40,22 @@ public class Executor{
       executor.shutdown();
    }
    
-   public void setPoolSize(int s){
+   public static void setPoolSize(int s){
       executor.setMaximumPoolSize(s);
    }
    
    public static void main(String[] args) throws Exception{
-      
+      final long t0=System.currentTimeMillis();
+      Runnable r=new Runnable(){public void run(){
+         int seed=1;
+         for(int i=700000000; i-->0;){
+            seed*=11273;
+            seed%=34567;
+         }
+         long t1=System.currentTimeMillis();
+         System.out.println(Thread.currentThread().getName()+": "+(t1-t0)+", result: "+seed);
+      }};
+      new Thread(r).start();
+      new Thread(r).start();
    }
 }
