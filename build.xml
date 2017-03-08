@@ -22,8 +22,7 @@
 	
     <target name="build" depends="compile">
         <copy todir="${tmpDir}/classes" overwrite="true">
-            <fileset dir="${jniDir}" includes="lib/**/*.dll"/>
-            <fileset dir="${jniDir}" includes="lib/**/*.so"/>
+            <fileset dir="${jniDir}" includes="lib/**/*compscan.*"/>
         </copy>
         <jar basedir="${tmpDir}/classes" destfile="CompScan.jar"
         	manifest="${srcDir}/META-INF/MANIFEST.MF">
