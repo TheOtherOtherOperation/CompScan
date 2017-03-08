@@ -371,6 +371,8 @@ public class CompScan {
 	 * @param args CLI arguments.
 	 */
 	public static void main(String[] args) throws Exception{
+System.out.println("Running with "+Executor.DEFAULT_POOL_SIZE+" threads");
+System.out.println("Press Enter to continue");
 System.in.read();
 //Executor.setPoolSize(1);
 		CompScan cs = null;

@@ -11,9 +11,9 @@ public class Executor{
          tmp=SystemUtil.getCoreThreadCount();
       }
       catch(Exception e){
-         tmp=2;
+         tmp=4;
       }
-      DEFAULT_POOL_SIZE=2;
+      DEFAULT_POOL_SIZE=tmp;
    }
    
    private static final BlockingQueue<Runnable> queue=new ArrayBlockingQueue<Runnable>(2*DEFAULT_POOL_SIZE);
