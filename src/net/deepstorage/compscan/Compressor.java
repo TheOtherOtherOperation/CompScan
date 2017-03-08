@@ -226,7 +226,7 @@ public class Compressor {
 	/**
 	 * Nested data class for encapsulating compression info.
 	 */
-	public class CompressionInfo {
+	public class CompressionInfo{
 		public final long bytesRead;
 		public final long blocksRead;
 		public final long superblocksRead;

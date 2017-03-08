@@ -41,7 +41,7 @@ public class SHA1Encoder {
    
    public static class MD{
       private final int hashCode;
-      private final byte[] data;
+      public final byte[] data;
       
       MD(byte[] array){
          int h=0;

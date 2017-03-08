@@ -5,7 +5,7 @@ import java.net.URL;
 
 public class SystemUtil{
    public static final String WINDOWS="Windows";
-   public static final String Linux="Linux";
+   public static final String LINUX="Linux";
    public static final String OS=detectOs();
    public static final String ARCH=detectArch();
    public static final String EXT= OS.equals(WINDOWS)? "dll": "so";
@@ -66,7 +66,14 @@ public class SystemUtil{
    }
    
    public static int getCoreThreadCount() throws Exception{
-      if(System.getProperty("os.name").indexOf("Windows") >= 0) return getOptimalThreadCountWindows();
+      if(OS.equals(LINUX)) try{ // more precise with respect to hyperthreads
+         return getCoreThreadCountLinux();
+      }
+      catch(Exception e){}
+      return Runtime.getRuntime().availableProcessors();
+   }
+   
+   public static int getCoreThreadCountLinux() throws Exception{
       BufferedReader localBufferedReader = new BufferedReader(new FileReader("/proc/cpuinfo"));
       int i = 0;
       for(;;){
@@ -78,10 +85,6 @@ public class SystemUtil{
       }
       if(i==0) throw new Exception("unexpected contents of /proc/cpuinfo");
       return i;
-   }
-   
-   private static int getOptimalThreadCountWindows() {
-      return Integer.parseInt(System.getenv("number_of_processors"));
    }
    
    public static void main(String[] args) throws Exception{
