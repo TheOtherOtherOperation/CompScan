@@ -16,24 +16,22 @@ public class SystemUtil{
       File dir=new File(System.getProperty("user.dir")+"/.compscan");
       if(!dir.exists()) dir.mkdir();
       File file=new File(dir,fullName);
-      if(!file.exists()){
-         String rpath="/lib/"+OS+"/"+ARCH+"/"+fullName;
-         URL res=SystemUtil.class.getResource(rpath);
-         if(res==null) throw new RuntimeException("dll resource not found: "+rpath);
-         InputStream in=res.openConnection().getInputStream();
+      String rpath="/lib/"+OS+"/"+ARCH+"/"+fullName;
+      URL res=SystemUtil.class.getResource(rpath);
+      if(res==null) throw new RuntimeException("dll resource not found: "+rpath);
+      InputStream in=res.openConnection().getInputStream();
+      try{
+         OutputStream out=new FileOutputStream(file);
          try{
-            OutputStream out=new FileOutputStream(file);
-            try{
-               byte[] buf=new byte[256];
-               for(int c; (c=in.read(buf))>=0; ) out.write(buf,0,c);
-            }
-            finally{
-               out.close();
-            }
+            byte[] buf=new byte[256];
+            for(int c; (c=in.read(buf))>=0; ) out.write(buf,0,c);
          }
          finally{
-            in.close();
+            out.close();
          }
+      }
+      finally{
+         in.close();
       }
       System.load(file.getPath());
    }
