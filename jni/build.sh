@@ -20,7 +20,7 @@ then
    ccflags="-D_JNI_IMPLEMENTATION_ -Wl,--kill-at"
    ext="dll"
 else
-   ccflags="-fPIC"
+   ccflags="-fPIC -z noexecstack"
    ext="so"
 fi
 
