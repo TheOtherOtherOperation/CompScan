@@ -1,5 +1,4 @@
 #include <jni.h>
-#include <windows.h>
 #include <openssl/sha.h>
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved)  {

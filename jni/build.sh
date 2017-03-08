@@ -20,11 +20,11 @@ then
    ccflags="-D_JNI_IMPLEMENTATION_ -Wl,--kill-at"
    ext="dll"
 else
-   ccflags=
+   ccflags="-fPIC"
    ext="so"
 fi
 
 libPath=lib/$os/$arch
 #[ ! -d libPath ] && echo 'lib path not found: '$libPath && exit
 
-gcc -Iinclude -L$libPath compscan.c $libPath/libcrypto.a -ljvm -shared $ccflags -o $libPath/compscan.$ext
+gcc -Iinclude -Iinclude/system/$os -L$libPath compscan.c $libPath/libcrypto.a -shared $ccflags -o $libPath/compscan.$ext
