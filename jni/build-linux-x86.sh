@@ -1,5 +1,7 @@
 #!/bin/sh
 
+#forse 32bit build under 64bit linux
+
 os=Linux
 arch=x86
 ccflags="-fPIC -z noexecstack"

@@ -28,3 +28,4 @@ libPath=lib/$os/$arch
 #[ ! -d libPath ] && echo 'lib path not found: '$libPath && exit
 
 gcc -Iinclude -Iinclude/system/$os -L$libPath compscan.c $libPath/libcrypto.a -shared $ccflags -o $libPath/compscan.$ext
+
