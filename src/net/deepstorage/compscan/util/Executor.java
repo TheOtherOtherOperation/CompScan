@@ -40,6 +40,10 @@ public class Executor{
       executor.shutdown();
    }
    
+   public static int getPoolSize(){
+      return executor.getMaximumPoolSize();
+   }
+   
    public static void setPoolSize(int s){
       executor.setMaximumPoolSize(s);
    }

@@ -33,53 +33,12 @@ public class SHA1Encoder {
       }
    }
    
-   public static Object encode(byte[] in) throws Exception{
+   public static byte[] encode(byte[] in) throws Exception{
       byte[] md=new byte[MD_SIZE];
       encode(in,md);
-      return new MD(md);
+      return md;
    }
    
-   public static class MD{
-      private final int hashCode;
-      public final byte[] data;
-      
-      MD(byte[] array){
-         int h=0;
-         for(int i=array.length; i-->0;){
-//            h=h*25147+array[i]*15913;
-            h=h*31+array[i];
-         }
-         hashCode=h;
-         data=array;
-      }
-      
-      @Override
-      public int hashCode(){
-         return hashCode;
-      }
-      
-      public boolean equals(Object o){
-         if(o==null) return false;
-         if(o==this) return true;
-         if(o instanceof MD){
-            MD that=(MD)o;
-            if(hashCode!=that.hashCode) return false;
-            byte[] d1=data;
-            byte[] d2=that.data;
-            if(d1==d2) return true;
-            if(d1.length!=d2.length) return false;
-            for(int i=d1.length;i-->0;){
-               if(d1[i]!=d2[i]) return false;
-            }
-            return true;
-         }
-         return false;
-      }
-      
-      public String toString(){
-         return convertToHex(data);
-      }
-   }
    
    private static String convertToHex(byte[] data) {
       StringBuffer buf = new StringBuffer();

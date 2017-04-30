@@ -24,11 +24,12 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import net.deepstorage.compscan.Compressor.BufferLengthException;
 import net.deepstorage.compscan.Compressor.CompressionInfo;
 import net.deepstorage.compscan.FileScanner.NoNextFileException;
-import net.deepstorage.compscan.util.Executor;
+import net.deepstorage.compscan.util.*;
 
 /**
  * CompScan's main class.
@@ -43,6 +44,28 @@ public class CompScan {
 	public static final String COMPRESSION_SUBPACKAGE = "compress";
 	// Symbolic constant for 1 million bytes (1 MB), the default input buffer size.
 	public static final int ONE_MB = 1_000_000;
+	
+   //Map suppliers for whole stream (big), single file (medium), single superblock (small)
+	//inject!!!
+   public static Supplier<MdMap> bigMapSupplier;
+   
+   public static final Supplier<MdMap> mediumMapSupplier=
+      new DirectMapSupplier(20,8,26,1024*1024*1024) //key size 20B, value size 8B, grow in 64M chunks, limit 1G
+   ;
+   public static final Supplier<MdMap> smallMapSupplier=
+      new JavaMapSupplier(20) //use java HashMap
+   ;
+   
+   //over this threshold use bigMapSupplier
+   private static final int bigMapSize= 256*1024*1024/120; // 256M/(max entry size)
+   //below this threshold use smallMapSupplier
+   private static final int smallMapSize=2000; //limit by load to gc
+	
+   public static Supplier<MdMap> getMapSupplier(long size){
+      if(size>=bigMapSize) return bigMapSupplier;
+      if(size<=smallMapSize) return smallMapSupplier;
+      return mediumMapSupplier;
+   }
 	
 	private final Date date;
 	
@@ -63,7 +86,7 @@ public class CompScan {
    private MutableCounter hashCounter;
 	private boolean printUsage;
    private Path logPath;
-    
+   
 	/**
 	 * Default constructor.
 	 * 
@@ -132,7 +155,9 @@ public class CompScan {
 		this.printUsage = printUsage;
       this.logPath=logPath;
 		setupLock = true;
-	}
+		
+      if(bigMapSupplier==null) throw new IllegalStateException("missing map supplier");
+   }
 	
 	/**
 	 * Run scan.
@@ -140,55 +165,58 @@ public class CompScan {
 	void run() {
 		System.out.format("Starting run.%n%n");
 
-		Results results = new Results(pathOut.getFileName().toString(), date);
-		results.set("block size", blockSize);
-		results.set("superblock size", superblockSize);
-		
-		hashCounter = new MutableCounter();
-		ConsoleDisplayThread cdt = new ConsoleDisplayThread(results, hashCounter, printUsage, logPath);
-
-		try {
-			FileScanner fs = new FileScanner(
-			   pathIn, blockSize, bufferSize, ioRate, compressor, results, hashCounter, verbose
-		   );
-			cdt.start();
-         fs.scanCombined();
-			if (printHashes) {
-				results.printHashes();
-			}
-		} catch (IOException e) {
-			System.err.format("A filesystem IO error ocurred.%n%n");
-			e.printStackTrace();
-			System.exit(1);
-		} catch (BufferLengthException e) {
-			System.err.format("The input buffer is the wrong size.%n%n");
-			e.printStackTrace();
-			System.exit(1);
-		} catch (NoNextFileException e) {
-			System.err.println(e.getMessage());
-			System.exit(1);
-		}
-		
-		cdt.interrupt();
-		try {
-			cdt.join();
-		} catch (InterruptedException e) {
-			// Nothing to do.
-		}
-		
-		// Save results.
-		try {
-			writeResults("totals.csv", results.toString(), overwriteOK);
-			writeResults("hashes.csv", results.makeHashCounterString(), overwriteOK);
-			System.out.println(
-					String.format(
-							"%n--> Output saved in \"%s\".%n", pathOut));
-		} catch (IOException e) {
-			System.err.println("Unable to save output.");
-			e.printStackTrace();
-		} finally {
-			System.out.println(results.toString());
-		}
+      Results results = new Results(pathOut.getFileName().toString(), date, bigMapSupplier);
+      try{
+         results.set("block size", blockSize);
+         results.set("superblock size", superblockSize);
+         
+         hashCounter = new MutableCounter();
+         ConsoleDisplayThread cdt = new ConsoleDisplayThread(results, hashCounter, printUsage, logPath);
+         try {
+   			FileScanner fs = new FileScanner(
+   			   pathIn, blockSize, bufferSize, ioRate, compressor, 
+   			   results, hashCounter, verbose
+   		   );
+   			cdt.start();
+            fs.scanCombined();
+   			if (printHashes) {
+   				results.printHashes();
+   			}
+   		} catch (IOException e) {
+   			System.err.format("A filesystem IO error ocurred.%n%n");
+   			e.printStackTrace();
+   			System.exit(1);
+   		} catch (BufferLengthException e) {
+   			System.err.format("The input buffer is the wrong size.%n%n");
+   			e.printStackTrace();
+   			System.exit(1);
+   		} catch (NoNextFileException e) {
+   			System.err.println(e.getMessage());
+   			System.exit(1);
+   		}
+   		
+   		cdt.interrupt();
+   		try {
+   			cdt.join();
+   		} catch (InterruptedException e) {
+   			// Nothing to do.
+   		}
+   		
+   		// Save results.
+   		try {
+   			writeResults("totals.csv", results.toString(), overwriteOK);
+   			writeResults("hashes.csv", results.makeHashCounterString(), overwriteOK);
+   			System.out.println(String.format("%n--> Output saved in \"%s\".%n", pathOut));
+   		} catch (IOException e) {
+   			System.err.println("Unable to save output.");
+   			e.printStackTrace();
+   		} finally {
+   			System.out.println(results.toString());
+   		}
+      }
+      finally{
+         results.releaseHashes();
+      }
 	}
 	
 	/**
@@ -197,53 +225,59 @@ public class CompScan {
 	void runFiles(Predicate<Path> fileFilter) {
 		System.out.format("Starting run.%n%n");
 		
-		Results totals = new Results(pathOut.getFileName().toString(), date);
-		totals.set("block size", blockSize);
-		totals.set("superblock size", superblockSize);
-		
-		List<Results> allResults = new LinkedList<>();
-		
-		hashCounter = new MutableCounter();
-      ConsoleDisplayThread cdt = new ConsoleDisplayThread(totals, hashCounter, printUsage, logPath);
-		
-		try{
-			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, totals, hashCounter, verbose);
-			cdt.start();
-         fs.scanSeparately(allResults, this, fileFilter, printHashes);
-		}catch (IOException e) {
-			System.err.format("A filesystem IO error ocurred.%n%n");
-			e.printStackTrace();
-			System.exit(1);
-		}catch (BufferLengthException e) {
-			System.err.format("The input buffer is the wrong size.%n%n");
-			e.printStackTrace();
-			System.exit(1);
-		}catch (NoNextFileException e) {
-			System.err.println(e.getMessage());
-			System.exit(1);
-		}
-		
-		cdt.interrupt();
-		try{
-			cdt.join();
-		} catch (InterruptedException e) {
-			// Nothing to do.
-		}
-		
-		// Save results.
-		String resultString = makeFileResultString(allResults, totals);
-		try {
-			writeResults("totals.csv", resultString, overwriteOK);
-			System.out.println(
-					String.format(
-							"%n--> Output saved in \"%s\".%n", pathOut));
-			// Hash results are saved incrementally in VMDK mode, so don't need to do anything here.
-		} catch (IOException e) {
-			System.err.println("Unable to save output.");
-			e.printStackTrace();
-		} finally {
-			System.out.println(resultString);
-		}
+      Results totals = new Results(pathOut.getFileName().toString(), date, bigMapSupplier);
+      try{
+   		totals.set("block size", blockSize);
+   		totals.set("superblock size", superblockSize);
+   		
+   		List<Results> allResults = new LinkedList<>();
+   		
+   		hashCounter = new MutableCounter();
+         ConsoleDisplayThread cdt = new ConsoleDisplayThread(totals, hashCounter, printUsage, logPath);
+   		
+   		try{
+   			FileScanner fs = new FileScanner(
+   			   pathIn, blockSize, bufferSize, ioRate, compressor, 
+               totals, hashCounter, verbose
+   			);
+   			cdt.start();
+            fs.scanSeparately(allResults, this, fileFilter, printHashes);
+   		}catch (IOException e) {
+   			System.err.format("A filesystem IO error ocurred.%n%n");
+   			e.printStackTrace();
+   			System.exit(1);
+   		}catch (BufferLengthException e) {
+   			System.err.format("The input buffer is the wrong size.%n%n");
+   			e.printStackTrace();
+   			System.exit(1);
+   		}catch (NoNextFileException e) {
+   			System.err.println(e.getMessage());
+   			System.exit(1);
+   		}
+   		
+   		cdt.interrupt();
+   		try{
+   			cdt.join();
+   		} catch (InterruptedException e) {
+   			// Nothing to do.
+   		}
+   		
+   		// Save results.
+   		String resultString = makeFileResultString(allResults, totals);
+   		try {
+   			writeResults("totals.csv", resultString, overwriteOK);
+   			System.out.println(String.format("%n--> Output saved in \"%s\".%n", pathOut));
+   			// Hash results are saved incrementally in VMDK mode, so don't need to do anything here.
+   		} catch (IOException e) {
+   			System.err.println("Unable to save output.");
+   			e.printStackTrace();
+   		} finally {
+   			System.out.println(resultString);
+   		}
+      }
+      finally{
+         totals.releaseHashes();
+      }
 	}
 	
 	/**
@@ -324,8 +358,11 @@ public class CompScan {
 	 */
 	public static void printHelp(String custom) {
 		System.out.format(
-            "Usage: CompScan [-h] [--help] [--mode (NORMAL|BIG <size>|VMDK)] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE] "
-			   + " pathIn pathOut blockSize superblockSize format[:<options>]%n"
+            "Usage: CompScan [-h] [--help] [--mode (NORMAL|BIG <size>|VMDK)]"
+            + " [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]"
+            + " [--mapType (java|direct|fs[:<path>])] [--mapDataSizeMax <size>]"
+            + " [--mapDataChunk <size>] [--mapListSize <number>] [--threads <number>]"
+            + " pathIn pathOut blockSize superblockSize format[:<options>]%n"
 				+ "Positional Arguments%n"
 			   + "         pathIn            path to the dataset%n"
 				+ "         pathOut           where to save the output%n"
@@ -350,8 +387,34 @@ public class CompScan {
             + "         --report <file>   print progress info to the file%n"
             + "         --rate MB_PER_SEC maximum MB/sec we're allowed to read%n"
 			   + "         --buffer-size BUFFER_SIZE size of the internal read buffer%n"
-				+ "         --hashes          print the hash table before exiting; the hashes are never saved to disk%n"
-		);
+            + "         --hashes          print the hash table before exiting; the hashes are never saved to disk%n"
+            + "         --threads         number of processing threads.%n"
+            + "                           Optimal value: number of CPU cores/hyperthreads.%n"
+            + "                           Default: autodetected%n"
+            + "         --mapType         select the implementation of the hash-counting map:%n"
+            + "                           * java - plain java.util.HashMap%n"
+            + "                           * direct - custom off-heap map over native RAM%n"
+            + "                           * fs - custom off-heap map over memory-mapped files%n"
+            + "                                  optionally includes path to the directory%n"
+            + "                           Default: fs:<user home>/.compscan/map%n"
+            + "         --mapMemoryMax    upper limit for expected map memory size.%n"
+            + "                           Holds only for direct and fs maps. Upon reaching%n"
+            + "                           this limit the maps will stop working.%n"
+            + "                           Estimation: <expected scan size>*100/<block size>%n"
+            + "                           Default: 20T (enough to scan 100TB in 500B blocks).%n"
+            + "         --mapMemoryChunk  map memory allocation chunks.%n"
+            + "                           Holds only for direct and fs maps.%n"
+            + "                           Too small chunks may cause speed degradation.%n"
+            + "                           Too large chunks may cause allocation problems.%n"
+            + "                           Optimal value:%n"
+            + "                           <expected map memory size (see above)>/1000%n"
+            + "                           Default: 256M%n"
+            + "         --mapListSize     map's internal parameter, controls the tradeoff%n"
+            + "                           between speed and memory consumtion%n"
+            + "                           (both are inversely proportional to it)%n"
+            + "                           Optimal range: 8..20%n"
+            + "                           Default: 9%n"
+      );
 		// Short-circuits.
 		if (custom != null && custom.length() > 0) {
 			System.out.format("%n" + custom + "%n");
@@ -371,10 +434,6 @@ public class CompScan {
 	 * @param args CLI arguments.
 	 */
 	public static void main(String[] args) throws Exception{
-System.out.println("Running with "+Executor.DEFAULT_POOL_SIZE+" threads");
-System.out.println("Press Enter to continue");
-System.in.read();
-//Executor.setPoolSize(1);
 		CompScan cs = null;
 		try{
 			cs = new CompScan(args);
@@ -385,14 +444,14 @@ System.in.read();
 		if (cs == null) {
 			System.exit(1);
 		}
-		
+      
       cs.scanMode.run(cs);
 	}
 	
  /**
 	 * A simple inner class for keeping track of the current hash count.
 	 */
-	public class MutableCounter {
+	public class MutableCounter{
 		private long c;
 		
 		public MutableCounter() {
@@ -434,7 +493,9 @@ System.in.read();
 		private final String name;
 		private final String timestamp;
 		private Map<String, Long> map;
-		private Map<Object, Long> hashes;
+      
+      //private Map<Object, Long> hashes;
+      private MdMap hashes;
 		
 		/**
 		 * Convenience constructor for creating a new Results object from a name
@@ -443,8 +504,8 @@ System.in.read();
 		 * @param name Name to assign to the resulting data set.
 		 * @param date Date object from which to generate the timestamp.
 		 */
-		public Results(String name, Date date) {
-			this(name, new SimpleDateFormat("MM/dd/yyyy KK:mm:ss a Z").format(date));			
+		public Results(String name, Date date, Supplier<MdMap> regSup) {
+         this(name, new SimpleDateFormat("MM/dd/yyyy KK:mm:ss a Z").format(date),regSup);
 		}
 		
 		/**
@@ -453,7 +514,7 @@ System.in.read();
 		 * @param name Name to assign to the resulting data set.
 		 * @param timestamp Formatted timestamp string to use.
 		 */
-		public Results(String name, String timestamp) {
+      public Results(String name, String timestamp, Supplier<MdMap> regSup) {
 			this.name = name;
 			this.timestamp = timestamp;
 			// Uses a LinkedHashMap to preserve insertion order.
@@ -461,7 +522,7 @@ System.in.read();
 			for (String s : KEYS) {
 				map.put(s, 0L);
 			}
-			hashes = new HashMap<>();
+         hashes = regSup.get();
 		}
 		
 		/**
@@ -508,13 +569,9 @@ System.in.read();
 		 * @param hash Sha-1 hash to update.
 		 * @param count Number to add to the hash counter.
 		 */
-      public synchronized void updateHash(Object hash, long count) {
+      public synchronized void updateHash(byte[] hash, long count) {
 //public void updateHash(Object hash, long count) {
-         if (!hashes.containsKey(hash)) {
-				hashes.put(hash, count);
-			} else {
-				hashes.put(hash, hashes.get(hash) + count);
-			}
+         hashes.add(hash,0,count);
 		}
 		
 		/**
@@ -522,22 +579,28 @@ System.in.read();
 		 * 
 		 * @param h Map<String, Long> containing counters for hash occurrences.
 		 */
-      public synchronized void updateHashes(Map<Object, Long> h) {
+      public synchronized void updateHashes(MdMap h){
 //public void updateHashes(Map<Object, Long> h) {
-         if (h == null) {
-				return;
-			}
-			for (Map.Entry<Object, Long> e : h.entrySet()) {
-				updateHash(e.getKey(), e.getValue());
-			}
+         if(h == null) return;
+			h.scan(new MdMap.Consumer(){
+            public void consume(byte[] md, int off, long count){
+               hashes.add(md,off,count);
+            }
+         });
 		}
-		
+      
+      public synchronized void updateHashes(Map<MD,Long> h){
+         if(h==null) return;
+         for(Map.Entry<MD,Long> e: h.entrySet()){
+            MD md=e.getKey();
+            hashes.add(md.data, md.off, e.getValue());
+         }
+      }
 		/**
 		 * Allows releasing resources for the hash counters.
 		 */
-      public void releaseHashes() {
-			hashes.clear();
-			System.gc();
+      public void releaseHashes(){
+         hashes.dispose();
 		}
 		
 		/**
@@ -553,8 +616,7 @@ System.in.read();
 			addTo("compressed bytes", ci.compressedBytes);
 			addTo("compressed blocks", ci.compressedBlocks);
 			addTo("actual bytes needed", ci.actualBytes);
-			Map<Object, Long> ciHashes = ci.getHashes();
-			updateHashes(ciHashes);
+         updateHashes(ci.getHashes());
 		}
 		
 		/**
@@ -562,9 +624,9 @@ System.in.read();
 		 * 
 		 * @param r Results object from which to update.
 		 */
-      public synchronized void feedOtherResults(Results r) {
+      public synchronized void feedOtherResults(Results r, boolean hashes){
 //public void feedOtherResults(Results r) {
-         feedOtherResults(r, r.hashes);
+         feedOtherResults(r, hashes? r.hashes: null);
 		}
 		
 		/**
@@ -573,7 +635,7 @@ System.in.read();
 		 * @param r Results object from which to update.
 		 * @param h Hashes map from which to update hashes.
 		 */
-      public synchronized void feedOtherResults(Results r, Map<Object, Long> h) {
+      private void feedOtherResults(Results r, MdMap h){
 //public void feedOtherResults(Results r, Map<Object, Long> h) {
          addTo("files read", r.get("files read"));
 			addTo("bytes read", r.get("bytes read"));
@@ -663,7 +725,6 @@ System.in.read();
 		 * @return A CSV-formatted string for the hash counters.
 		 */
       public synchronized String makeHashCounterString() {        
-//public String makeHashCounterString() {        
          Map<Long, Long> counters = getHashCounters();
 			
 			List<String> lines = new LinkedList<String>();
@@ -688,16 +749,16 @@ System.in.read();
       public synchronized Map<Long, Long> getHashCounters() {
 //public Map<Long, Long> getHashCounters() {
          Map<Long, Long> counters = new TreeMap<Long, Long>();
-			
-			for (Iterator<Map.Entry<Object, Long>> it = hashes.entrySet().iterator(); it.hasNext(); ) {
-            Map.Entry<Object, Long> current = it.next();
-				long key = current.getValue();
-				long value = (counters.containsKey(key) ? counters.get(key) + 1L : 1L);
-				
-				counters.put(key, value);
-			}
-			
-			return counters;
+System.out.println("CS.Results.getHashCounters()");
+System.out.println("  hashes size="+hashes.size());
+         hashes.scan(new MdMap.Consumer(){
+			   public void consume(byte[] md, int off, long count){
+               Long n=counters.get(count);
+               counters.put(count, n==null? 1L: n+1L);
+            }
+			});
+System.out.println("  counters="+counters);
+         return counters;
 		}
 		
 		@Override
@@ -729,7 +790,7 @@ System.in.read();
 		 * 
 		 * @return The hash counters map.
 		 */
-      public Map<Object, Long> getHashes() {
+      public MdMap getHashes() {
 			return hashes;
 		}
 		
@@ -738,12 +799,17 @@ System.in.read();
 		 * 
 		 * @return Formatted string of the hash counters map.
 		 */
-		public synchronized String makeHashString() {
-			return String.join(System.lineSeparator(),
-					hashes.entrySet()
-					.stream()
-					.map(x -> String.format("%1$s -> %2$d", x.getKey(), x.getValue()))
-					.collect(Collectors.toList()));
+		public synchronized String makeHashString(){
+         StringBuilder sb=new StringBuilder();
+		   hashes.scan(new MdMap.Consumer(){
+            public void consume(byte[] md, int off, long count){
+               sb.append(Util.toHexString(md,off,hashes.keyLength()));
+               sb.append(" -> ");
+               sb.append(count);
+               sb.append("\n");
+            }
+		   });
+		   return sb.toString();
 		}
 		
 		/**

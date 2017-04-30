@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import net.deepstorage.compscan.CompScan.MutableCounter;
 import net.deepstorage.compscan.CompScan.Results;
@@ -44,8 +45,10 @@ public class FileScanner {
 	 * @param hashCounter MutableCounter used for tracking the number of currently active unique hashes.
 	 * @param verbose Whether or not to enable verbose logging.
 	 */
-	public FileScanner(Path root, int blockSize, int bufferSize, double ioRate, Compressor compressor,
-			Results totals, MutableCounter hashCounter, boolean verbose) {
+	public FileScanner(
+	   Path root, int blockSize, int bufferSize, double ioRate, Compressor compressor,
+		Results totals, MutableCounter hashCounter, boolean verbose
+   ) {
 		this.root = root;
 		this.blockSize = blockSize;
 		this.bufferSize = bufferSize;
@@ -138,17 +141,24 @@ public class FileScanner {
 			}
 			while(fw.hasNext()){
 				Path f = fw.next();
-				Results r = new Results(f.toString(), totals.getTimestamp());
-				r.set("block size", totals.get("block size"));
-				r.set("superblock size", totals.get("superblock size"));
-				hashCounter.resetCount();
-				scanFile(f, r);
-			   r.set("files read", 1L);
-            cs.writeHashResults(r, f);
-            if(printHashes){
-               r.printHashes();
+            long regSize=f.toFile().length()/blockSize;
+				Results r = new Results(
+               f.toString(), totals.getTimestamp(), CompScan.getMapSupplier(regSize)
+				);
+            try{
+               r.set("block size", totals.get("block size"));
+               r.set("superblock size", totals.get("superblock size"));
+               hashCounter.resetCount();
+               scanFile(f, r);
+               r.set("files read", 1L);
+               cs.writeHashResults(r, f);
+               if(printHashes){
+                  r.printHashes();
+               }
             }
-            r.releaseHashes();
+            finally{
+               r.releaseHashes();
+            }
             fileResults.add(r);
 			}
 		}
@@ -175,13 +185,21 @@ public class FileScanner {
          JobGroup jg=new JobGroup();
          while (fws.hasMore()){
             final byte[] buffer = fws.getBytes();
-            final Results intermediate = new Results(f.toString(), r.getTimestamp());
 				Executor.exec(jg.addJob(new Runnable(){public void run(){
-               scanBuffer(buffer, intermediate);
-               synchronized(FileScanner.this){
-                  r.feedOtherResults(intermediate, intermediate.getHashes());
-                  totals.feedOtherResults(intermediate, null);
-                  hashCounter.setCount(r.getHashes().size());;
+               Results intermediate = new Results(
+                  f.toString(), r.getTimestamp(),
+                  CompScan.getMapSupplier(buffer.length/blockSize)
+               );
+               try{
+                  scanBuffer(buffer, intermediate);
+                  synchronized(FileScanner.this){
+                     r.feedOtherResults(intermediate, true);
+                     totals.feedOtherResults(intermediate, false);
+                     hashCounter.setCount(r.getHashes().size());
+                  }
+               }
+               finally{
+                  intermediate.releaseHashes();
                }
             }
             }));

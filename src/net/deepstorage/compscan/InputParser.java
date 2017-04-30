@@ -10,12 +10,17 @@ package net.deepstorage.compscan;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.io.File;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Queue;
+import java.util.function.Supplier;
+import java.lang.reflect.Field;
+import net.deepstorage.compscan.util.*;
 
 /**
  * CLI parser for CompScan.
@@ -32,6 +37,16 @@ public class InputParser {
 		"formatString"
 	};
 	
+   private static long MAP_MEMORY_MAX=20*1024L*1024L*1024L*1024L;//20TB: upper limit
+   private static long MAP_MEMORY_CHUNK=256*1024L*1024L; //256M
+   private static int MAP_LIST_SIZE=9;
+   private static File MAP_DIR=new File(System.getProperty("user.dir"),".compscan/map");
+   static{
+      if(!MAP_DIR.exists()) MAP_DIR.mkdirs();
+   }
+   
+   private static boolean pause=false;
+ 
 	private CompScan compScan;
 	
 	private Map<String, Boolean> assigned;
@@ -95,21 +110,41 @@ public class InputParser {
 		int count = 0;
 		while (it.hasNext()) {
 			String arg = it.next();
-			if (arg.startsWith("-")) {
+			if(arg.startsWith("-")) {
 				parseOptional(arg, it);
-			} else {
+			}
+			else{
 				parsePositional(arg, it, count++);
 			}
 		}
 		
-		checkPositionals();
-		
+      checkOptionals();
+      checkPositionals();
+      
       compScan.setup(
          ioRate, pathIn, pathOut, scanMode, scanModeArg, blockSize, superblockSize, 
          bufferSize, overwriteOK, compressor, printHashes, verbose, printUsage, logPath
 		);
 		printConfig();
-	}
+      
+      //remove direct memory limit
+      try{
+         Class vm=Class.forName("sun.misc.VM");
+         Field directMemory=vm.getDeclaredField("directMemory");
+         directMemory.setAccessible(true);
+         directMemory.set(null,MAP_MEMORY_MAX);
+      }
+      catch(Exception e){
+         e.printStackTrace();
+         System.out.println("Failed to change direct memory limit; use -XX:MaxDirectMemorySize=.. option to avoid OutOfMemoryException");
+      }
+      
+      if(pause) try{
+         System.out.println("press 'Enter' to continue");
+         System.in.read();
+      }
+      catch(IOException e){}
+   }
 	
 	/**
 	 * Parse a single positional argument.
@@ -273,18 +308,82 @@ public class InputParser {
 		case "--overwrite":
 			overwriteOK = true;
 			break;
-		case "--hashes":
-			printHashes = true;
-			break;
-		// Default.
-		default:
+      case "--hashes":
+         printHashes = true;
+         break;
+      case "--mapType":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for map type"
+         );
+         String[] expr=it.next().split(":");
+         String type=expr[0];
+         Supplier<MdMap> sup;
+         switch(type){
+            case "java":
+               sup=new JavaMapSupplier(SHA1Encoder.MD_SIZE);
+               break;
+            case "direct":
+               sup=new DirectMapSupplier(
+                  SHA1Encoder.MD_SIZE, MAP_LIST_SIZE,
+                  Util.log(MAP_MEMORY_CHUNK), MAP_MEMORY_MAX
+               );
+               break;
+            case "fs":
+               File dir= expr.length>=2? new File(expr[1]): MAP_DIR;
+               sup=new FsMapSupplier(
+                  SHA1Encoder.MD_SIZE, MAP_LIST_SIZE,
+                  Util.log(MAP_MEMORY_CHUNK), MAP_MEMORY_MAX, dir
+               );
+               break;
+            default: throw new IllegalArgumentException("Illegal option for map type: "+type);
+         }
+         CompScan.bigMapSupplier=sup;
+         break;
+      case "--mapMemoryMax":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for map size"
+         );
+         MAP_MEMORY_MAX=Util.parseSize(it.next());
+         break;
+      case "--mapMemoryChunk":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for map chunk"
+         );
+         MAP_MEMORY_CHUNK=Util.parseSize(it.next());
+         break;
+      case "--mapListSize":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for map list size"
+         );
+         MAP_LIST_SIZE=Integer.parseInt(it.next());
+         break;
+      case "--threads":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for thread count"
+         );
+         Executor.setPoolSize(Integer.parseInt(it.next()));
+         break;
+      case "--pause":
+         pause=true;
+         break;
+      // Default.
+      default:
 			throw new IllegalArgumentException(
 					String.format(
 							"Unknown optional argument \"%1$s\".", arg));
 		}
 	}
 	
-	/**
+   private void checkOptionals(){
+      if(CompScan.bigMapSupplier==null){
+         CompScan.bigMapSupplier=new FsMapSupplier(
+            SHA1Encoder.MD_SIZE, MAP_LIST_SIZE,
+            Util.log(MAP_MEMORY_CHUNK), MAP_MEMORY_MAX, MAP_DIR
+         );
+      }
+   }
+   
+   /**
 	 * Check that all positional arguments were assigned.
 	 */
 	private void checkPositionals() {
@@ -318,8 +417,10 @@ public class InputParser {
 				"    - overwriteOK:       %8$s%n" +
 				"    - printHashes:       %9$s%n" +
 				"    - formatString:      %10$s%n" +
-				"    - verbose:           %11$s%n",
-				(ioRate == CompScan.UNLIMITED ? "UNLIMITED" : Double.toString(ioRate)),
+            "    - verbose:           %11$s%n"+
+            "    - map type:          %12$s%n"+
+            "    - threads:           %13$s%n",
+            (ioRate == CompScan.UNLIMITED ? "UNLIMITED" : Double.toString(ioRate)),
 				pathIn,
 				pathOut,
 				scanMode.toString(),
@@ -329,7 +430,9 @@ public class InputParser {
 				Boolean.toString(overwriteOK),
 				Boolean.toString(printHashes),
 				formatString,
-				Boolean.toString(verbose)
+				Boolean.toString(verbose),
+				CompScan.bigMapSupplier,
+				Executor.getPoolSize()
 				);
 		System.out.println(setupString);
 	}

@@ -2,6 +2,7 @@ package net.deepstorage.compscan;
 
 import java.util.*;
 import java.nio.file.*;
+import net.deepstorage.compscan.util.Util;
 
 public enum ScanMode{
    NORMAL,
@@ -11,7 +12,7 @@ public enum ScanMode{
          if(!data.hasNext()) throw new IllegalArgumentException(
             "BIG mode requires following size specifier"
          );
-         return parseFileSize(data.next());
+         return Util.parseSize(data.next());
       }
       @Override
       void run(CompScan host){
@@ -52,25 +53,5 @@ public enum ScanMode{
       String[] parts = f.getFileName().toString().split("\\.(?=\\w+$)");
       if(parts.length<2) return null;
       return parts[parts.length-1];
-   }
-   
-   private static Long parseFileSize(String spec){
-      if(spec==null || spec.length()==0) return null;
-      char lastChar=spec.charAt(spec.length()-1);
-      long scale=1;
-      if(Character.isLetter(lastChar)){
-         spec=spec.substring(0,spec.length()-1);
-         switch(Character.toLowerCase(lastChar)){
-            case 'k': scale=1<<10; break;
-            case 'm': scale=1<<20; break;
-            case 'g': scale=1<<30; break;
-         }
-      }
-      try{
-         return Long.parseLong(spec)*scale;
-      }
-      catch(NumberFormatException e){
-         throw new IllegalArgumentException("Incorrect format for BIG size specifier: "+spec);
-      }
    }
 }

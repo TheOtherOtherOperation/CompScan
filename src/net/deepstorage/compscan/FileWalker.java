@@ -10,6 +10,8 @@ package net.deepstorage.compscan;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.FileSystems;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Queue;
@@ -142,5 +144,14 @@ public class FileWalker implements AutoCloseable {
 	@Override
 	public void close() {
 		fileStream.close();
+	}
+	
+	public static void main(String[] args) throws Exception{
+      Path path= args.length==0?
+         FileSystems.getDefault().getRootDirectories().iterator().next():
+         Paths.get(args[0])
+      ;
+      FileWalker fw=new FileWalker(path, f->Files.isRegularFile(f), false);
+      while(fw.hasNext()) System.out.println(fw.next());
 	}
 }

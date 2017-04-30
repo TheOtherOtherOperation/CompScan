@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import net.deepstorage.compscan.util.MD;
 
 /**
  * The abstract Compressor class defines the procedures needed for a compression scheme to be used with CompScan.
@@ -184,19 +185,19 @@ public class Compressor {
 	 * @return Map<String, Long> with counters of hash codes.
 	 * @throws BufferLengthException if the buffer is the wrong size.
 	 */
-	public Map<Object, Long> hashBuffer(byte[] data) throws BufferLengthException {
+	public Map<MD, Long> hashBuffer(byte[] data) throws BufferLengthException {
 		if (data.length != buffer.length) {
 			throw new BufferLengthException(
 					String.format(
 							"Compressor.hashBuffer requires exactly one superblock of data: %1$d bytes given, %2$d bytes expected.",
 							data.length, buffer.length));
 		}
-		Map<Object, Long> counters = new HashMap<>();
+		Map<MD, Long> counters = new HashMap<>();
 		// Since the buffer is enforced to be one superblock, an even multiple of block size, we can use simple
 		// iteration.
 		for (int i = 0; i + blockSize <= data.length; i += blockSize) {
 			try {
-			   Object key=SHA1Encoder.encode(Arrays.copyOfRange(data, i, i + blockSize));
+			   MD key=new MD(SHA1Encoder.encode(Arrays.copyOfRange(data, i, i + blockSize)));
 				if(!counters.containsKey(key)){
 					counters.put(key, 1L);
 				}
@@ -233,7 +234,7 @@ public class Compressor {
 		public final long compressedBytes;
 		public final long compressedBlocks;
 		public final long actualBytes;
-		private final Map<Object, Long> hashes;
+		private final Map<MD, Long> hashes;
 		public final long uniqueHashes;
 		
 		/**
@@ -248,7 +249,7 @@ public class Compressor {
 		 * @param hashes Map<String, Long> of counters for hash codes.
 		 */
 		private CompressionInfo(long bytesRead, long blocksRead, long superblocksRead, long compressedBytes,
-                            long compressedBlocks, long actualBytes, Map<Object, Long> hashes) {
+                            long compressedBlocks, long actualBytes, Map<MD, Long> hashes) {
 			this.bytesRead = bytesRead;
 			this.blocksRead = blocksRead;
 			this.superblocksRead = superblocksRead;
@@ -266,7 +267,7 @@ public class Compressor {
 		 * @param compressedBytes Size of the compressed data.
 		 *  * @param hashes Map<String, Long> of counters for hash codes.
 		 */
-      private CompressionInfo(long bytesRead, long compressedBytes, Map<Object, Long> hashes) throws BufferLengthException {
+      private CompressionInfo(long bytesRead, long compressedBytes, Map<MD, Long> hashes) throws BufferLengthException {
 			this.bytesRead = bytesRead;
 			this.compressedBytes = compressedBytes;
 			
@@ -285,7 +286,7 @@ public class Compressor {
 		 * 
 		 * @return Map<String, Long> containing the hash counters.
 		 */
-		public Map<Object, Long> getHashes() {
+      public Map<MD, Long> getHashes() {
 			return hashes;
 		}
 	}
