@@ -37,8 +37,8 @@ public class InputParser {
 		"formatString"
 	};
 	
-   private static long MAP_MEMORY_MAX=20*1024L*1024L*1024L*1024L;//20TB: upper limit
-   private static long MAP_MEMORY_CHUNK=256*1024L*1024L; //256M
+   private static long MAP_MEMORY_MAX=128*1024L*1024L*1024L*1024L;//128T: upper limit
+   private static long MAP_MEMORY_CHUNK=128*1024L*1024L; //128M
    private static int MAP_LIST_SIZE=9;
    private static File MAP_DIR=new File(System.getProperty("user.dir"),".compscan/map");
    static{
@@ -315,9 +315,8 @@ public class InputParser {
          if(!it.hasNext()) throw new IllegalArgumentException(
             "Reached end of arguments for map type"
          );
-         String[] expr=it.next().split(":");
-         String type=expr[0];
          Supplier<MdMap> sup;
+         String type=it.next();
          switch(type){
             case "java":
                sup=new JavaMapSupplier(SHA1Encoder.MD_SIZE);
@@ -329,16 +328,24 @@ public class InputParser {
                );
                break;
             case "fs":
-               File dir= expr.length>=2? new File(expr[1]): MAP_DIR;
                sup=new FsMapSupplier(
                   SHA1Encoder.MD_SIZE, MAP_LIST_SIZE,
-                  Util.log(MAP_MEMORY_CHUNK), MAP_MEMORY_MAX, dir
+                  Util.log(MAP_MEMORY_CHUNK), MAP_MEMORY_MAX, MAP_DIR
                );
                break;
             default: throw new IllegalArgumentException("Illegal option for map type: "+type);
          }
          CompScan.bigMapSupplier=sup;
          break;
+      case "--mapDir":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for map directory"
+         );
+         MAP_DIR=new File(it.next());
+         break;
+      case "--mapOptions":
+         CompScan.printMapOptions();
+         System.exit(0);
       case "--mapMemoryMax":
          if(!it.hasNext()) throw new IllegalArgumentException(
             "Reached end of arguments for map size"

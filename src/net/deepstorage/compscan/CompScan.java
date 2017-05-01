@@ -391,29 +391,14 @@ public class CompScan {
             + "         --threads         number of processing threads.%n"
             + "                           Optimal value: number of CPU cores/hyperthreads.%n"
             + "                           Default: autodetected%n"
+            + "         --pause           make pause (e.g. to attach external profiler)%n"
             + "         --mapType         select the implementation of the hash-counting map:%n"
             + "                           * java - plain java.util.HashMap%n"
             + "                           * direct - custom off-heap map over native RAM%n"
             + "                           * fs - custom off-heap map over memory-mapped files%n"
-            + "                                  optionally includes path to the directory%n"
             + "                           Default: fs:<user home>/.compscan/map%n"
-            + "         --mapMemoryMax    upper limit for expected map memory size.%n"
-            + "                           Holds only for direct and fs maps. Upon reaching%n"
-            + "                           this limit the maps will stop working.%n"
-            + "                           Estimation: <expected scan size>*100/<block size>%n"
-            + "                           Default: 20T (enough to scan 100TB in 500B blocks).%n"
-            + "         --mapMemoryChunk  map memory allocation chunks.%n"
-            + "                           Holds only for direct and fs maps.%n"
-            + "                           Too small chunks may cause speed degradation.%n"
-            + "                           Too large chunks may cause allocation problems.%n"
-            + "                           Optimal value:%n"
-            + "                           <expected map memory size (see above)>/1000%n"
-            + "                           Default: 256M%n"
-            + "         --mapListSize     map's internal parameter, controls the tradeoff%n"
-            + "                           between speed and memory consumtion%n"
-            + "                           (both are inversely proportional to it)%n"
-            + "                           Optimal range: 8..20%n"
-            + "                           Default: 9%n"
+            + "         --mapDir          home directory for fs-type map%n"
+            + "         --mapOptions      print advanced map options and exit%n"
       );
 		// Short-circuits.
 		if (custom != null && custom.length() > 0) {
@@ -421,6 +406,29 @@ public class CompScan {
 		}
 	}
 	
+	static void printMapOptions(){
+      System.out.format(
+            "Advanced map options:"
+            + "         --mapMemoryMax    upper expected limit for map memory size.%n"
+            + "                           Holds only for direct and fs maps. Upon reaching%n"
+            + "                           this limit the maps will stop working.%n"
+            + "                           Estimation: <expected scan size>*100/<block size>%n"
+            + "                           Default: 128TiB%n"
+            + "         --mapMemoryChunk  map memory allocation chunks.%n"
+            + "                           Holds only for direct and fs maps.%n"
+            + "                           Too small chunks may cause speed degradation.%n"
+            + "                           Too large chunks may cause allocation problems.%n"
+            + "                           Optimal value:%n"
+            + "                           <expected map memory size (see above)>/1000%n"
+            + "                           Default: 128MiB%n"
+            + "         --mapListSize     map's internal parameter, controls the tradeoff%n"
+            + "                           between speed and memory consumtion%n"
+            + "                           (both are inversely proportional to it)%n"
+            + "                           Optimal range: 8..20%n"
+            + "                           Default: 9%n"
+      );
+	}
+   
 	/**
 	 * Convenience overload for printHelp.
 	 */
