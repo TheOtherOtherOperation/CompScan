@@ -46,7 +46,6 @@ Positional Arguments
                       currently includes None,LZ4,GZIP,LZW
     format options    for LZ4: compression level 0 - 17, default 9
                       for GZIP: compression level 1 - 9, default 6
-```
 Optional Arguments
    -h, --help        print this help message
    --verbose         enable verbose console feedback (should only be used for debugging)
@@ -87,6 +86,7 @@ Advanced map options:
 					   (both are inversely proportional to it)
 					   Optimal range: 8..20
 					   Default: 9
+```
 
 
 
