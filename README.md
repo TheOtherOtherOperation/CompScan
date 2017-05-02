@@ -62,8 +62,8 @@ Optional Arguments
    --buffer-size BUFFER_SIZE size of the internal read buffer
    --hashes          print the hash table before exiting; the hashes are never saved to disk
    --threads         number of processing threads.
-  				     Optimal value: number of CPU cores/hyperthreads.
-				     Default: autodetected
+                     Optimal value: number of CPU cores/hyperthreads.
+                     Default: autodetected
    --pause           make pause (e.g. to attach external profiler)
    --mapType         select the implementation of the hash-counting map:
                            * java - plain java.util.HashMap
@@ -74,18 +74,19 @@ Optional Arguments
    --mapOptions      print advanced map options and exit
 
 Advanced map options:
-	 --mapMemoryMax    upper expected limit for map memory size. Holds only for direct and fs maps. Upon reaching this limit the maps will stop working.
-					   Estimation: <expected scan size>*100/<block size>
-					   Default: 128TiB
-	 --mapMemoryChunk  map memory allocation chunks. Holds only for direct and fs maps.
-					   Too small chunks may cause speed degradation. Too large chunks may cause allocation problems.
-					   Optimal value:
-					   <expected map memory size (see above)>/1000
-					   Default: 128MiB
-	 --mapListSize     map's internal parameter, controls the tradeoff between speed and memory consumtion
-					   (both are inversely proportional to it)
-					   Optimal range: 8..20
-					   Default: 9
+   --mapMemoryMax    upper bound for map data size. Holds only for direct and fs maps. 
+                     Upon reaching this limit the maps will stop working.
+                     Estimation: <expected scan size>*100/<block size>
+                     Default: 128TiB
+   --mapMemoryChunk  map memory allocation chunks. Holds only for direct and fs maps.
+                     Too small chunks may cause speed degradation. Too large chunks may cause allocation problems.
+                     Optimal value:
+                     <expected map memory size (see above)>/1000
+                     Default: 128MiB
+   --mapListSize     map's internal parameter, controls the tradeoff between speed and memory consumtion
+                     (both are inversely proportional to it)
+                     Optimal range: 8..20
+                     Default: 9
 ```
 
 
