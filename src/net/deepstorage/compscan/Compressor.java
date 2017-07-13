@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import net.deepstorage.compscan.util.MD;
 
 /**
@@ -25,17 +26,16 @@ import net.deepstorage.compscan.util.MD;
 public class Compressor {
 	private CompressionInterface compressionInterface;
 	private byte[] buffer;
-	private final int blockSize;
 	private final int superblockSize;
 	private final String formatString;
 	private long bytesRead;
-	private long blocksRead;
 	private long superblocksRead;
 	private long compressedBytes;
-	private long compressedBlocks;
-	private long actualBytes;
-	
-	/**
+   
+   private long inputSize;
+   private long compressedInputSize;
+   
+   /**
 	 * Instantiate a new Compressor.
 	 * 
 	 * @param blockSize The block size of the compression scheme in bytes.
@@ -43,17 +43,7 @@ public class Compressor {
 	 * @param formatString The name of the compression scheme.
 	 * @throws IllegalArgumentException if buffSize, blockSize, or superblockSize are nonpositive, or if formatString is empty or null.
 	 */
-	protected Compressor(int blockSize, int superblockSize, String formatString) throws IllegalArgumentException {
-		if (blockSize < 1 || blockSize >= superblockSize) {
-			throw new IllegalArgumentException(String.format(
-					"Block size (%d) must be a positive integer.", blockSize));
-		}
-		this.blockSize = blockSize;
-		if (superblockSize < 1 || superblockSize % blockSize != 0) {
-			throw new IllegalArgumentException(String.format(
-					"Superblock size (%d) must be a positive integer multiple of block size (%d).",
-					superblockSize, blockSize));
-		}
+   protected Compressor(int superblockSize, String formatString) throws IllegalArgumentException {
 		this.superblockSize = superblockSize;
 		if (formatString == null || formatString.length() == 0) {
 			throw new IllegalArgumentException("Format string cannot be null or empty string.");
@@ -72,11 +62,8 @@ public class Compressor {
 			throw new IllegalArgumentException(e.getMessage());
 		}
 		bytesRead = 0L;
-		blocksRead = 0L;
 		superblocksRead = 0L;
 		compressedBytes = 0L;
-		compressedBlocks = 0L;
-		actualBytes = 0L;
 		buffer = new byte[superblockSize];
 		clearBuffer();
 	}
@@ -123,15 +110,6 @@ public class Compressor {
 	}
 	
 	/**
-	 * Getter for block size.
-	 * 
-	 * @return Size of the block size in bytes.
-	 */
-	public int getBlockSize() {
-		return blockSize;
-	}
-	
-	/**
 	 * Getter for superblock size.
 	 * 
 	 * @return Size of the superblock size in bytes.
@@ -150,13 +128,14 @@ public class Compressor {
 	}
 	
 	/**
-	 * Feed a data buffer into the Compressor.
+	 * Compress and lazily summate data, produce info
+	 * Thread-safe.
 	 * 
 	 * @param data Data buffer containing exactly one superblock of data to feed into the Compressor.
 	 * @return CompressionInfo with the results of the compression.
 	 * @throws BufferLengthException if data.length > buffSize.
 	 */
-	public CompressionInfo feedData(byte[] data) throws BufferLengthException {
+   public Function<Integer,CompressionInfo> process(byte[] data) throws BufferLengthException {
 		if (data.length != buffer.length) {
 			throw new BufferLengthException(
 					String.format(
@@ -165,65 +144,25 @@ public class Compressor {
 		}
 		
 		// We want the input data to be exactly one superblock in size. 
-		byte[] compressed = compressionInterface.compress(data, blockSize);
-		CompressionInfo ci = new CompressionInfo(data.length, compressed.length, hashBuffer(data));
-		synchronized(this){
-         bytesRead += ci.bytesRead;
-         blocksRead += ci.blocksRead;
-         superblocksRead += 1L;
-         compressedBytes += ci.compressedBytes;
-         compressedBlocks += ci.compressedBlocks;
-         actualBytes += ci.actualBytes;
-         return ci;
-      }
-	}
+		byte[] compressed = compressionInterface.compress(data, -1);
+		return blockSize->{synchronized(Compressor.this){
+         bytesRead+=data.length;
+         superblocksRead+=1;
+         compressedBytes+=compressed.length;
+         return new CompressionInfo(data.length, compressed.length, blockSize);
+      }};
+   }
 	
-	/**
-	 * Generate SHA-1 hashes for the blocks in a superblock.
-	 * 
-	 * @param data Data buffer for which to generate hashes. Must be exactly one superblock in size.
-	 * @return Map<String, Long> with counters of hash codes.
-	 * @throws BufferLengthException if the buffer is the wrong size.
-	 */
-	public Map<MD, Long> hashBuffer(byte[] data) throws BufferLengthException {
-		if (data.length != buffer.length) {
-			throw new BufferLengthException(
-					String.format(
-							"Compressor.hashBuffer requires exactly one superblock of data: %1$d bytes given, %2$d bytes expected.",
-							data.length, buffer.length));
-		}
-		Map<MD, Long> counters = new HashMap<>();
-		// Since the buffer is enforced to be one superblock, an even multiple of block size, we can use simple
-		// iteration.
-		for (int i = 0; i + blockSize <= data.length; i += blockSize) {
-			try {
-			   MD key=new MD(SHA1Encoder.encode(Arrays.copyOfRange(data, i, i + blockSize)));
-				if(!counters.containsKey(key)){
-					counters.put(key, 1L);
-				}
-				else{
-					counters.put(key, counters.get(key) + 1L);
-				}
-			}
-			catch (Exception e) {
-				// Really, this should never happen, since we know the algorithm exists.
-				e.printStackTrace();
-			}
-		}
-		
-		return counters;
-	}
-	
+   public CompressionInfo info(int blockSize){
+      return new CompressionInfo(inputSize, compressedInputSize, blockSize);
+   }
+   
 	/**
 	 * Get the total compression info for all data passed to feedData up until now.
 	 * 
 	 * @return CompressionInfo containing the compression info for all data fed up until now.
 	 */
-	public CompressionInfo getCompressionInfo() {
-		return new CompressionInfo(bytesRead, blocksRead, superblocksRead, compressedBytes,
-				                   compressedBlocks, actualBytes, null);
-	}
-	
+	 
 	/**
 	 * Nested data class for encapsulating compression info.
 	 */
@@ -234,8 +173,6 @@ public class Compressor {
 		public final long compressedBytes;
 		public final long compressedBlocks;
 		public final long actualBytes;
-		private final Map<MD, Long> hashes;
-		public final long uniqueHashes;
 		
 		/**
 		 * Instantiate a new CompressionInfo from raw values.
@@ -249,15 +186,13 @@ public class Compressor {
 		 * @param hashes Map<String, Long> of counters for hash codes.
 		 */
 		private CompressionInfo(long bytesRead, long blocksRead, long superblocksRead, long compressedBytes,
-                            long compressedBlocks, long actualBytes, Map<MD, Long> hashes) {
+                            long compressedBlocks, long actualBytes) {
 			this.bytesRead = bytesRead;
 			this.blocksRead = blocksRead;
 			this.superblocksRead = superblocksRead;
 			this.compressedBytes = compressedBytes;
 			this.compressedBlocks = compressedBlocks;
 			this.actualBytes = actualBytes;
-			this.hashes = hashes;
-			uniqueHashes = hashes.size();
 		}
 		
 		/**
@@ -267,7 +202,7 @@ public class Compressor {
 		 * @param compressedBytes Size of the compressed data.
 		 *  * @param hashes Map<String, Long> of counters for hash codes.
 		 */
-      private CompressionInfo(long bytesRead, long compressedBytes, Map<MD, Long> hashes) throws BufferLengthException {
+      private CompressionInfo(long bytesRead, long compressedBytes, int blockSize) throws BufferLengthException {
 			this.bytesRead = bytesRead;
 			this.compressedBytes = compressedBytes;
 			
@@ -277,17 +212,6 @@ public class Compressor {
 			compressedBlocks = (compressedBytes % blockSize == 0 ?
 					compressedBytes / blockSize : compressedBytes / blockSize + 1);
 			actualBytes = compressedBlocks * blockSize;
-			this.hashes = hashes;
-			uniqueHashes = hashes.size();
-		}
-		
-		/**
-		 * Get the hashes map.
-		 * 
-		 * @return Map<String, Long> containing the hash counters.
-		 */
-      public Map<MD, Long> getHashes() {
-			return hashes;
 		}
 	}
 	

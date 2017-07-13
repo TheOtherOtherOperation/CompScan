@@ -20,17 +20,37 @@ public class Util{
       });
    }
    
+   public static String toString(byte[] data){
+      return toString(data,0,data.length);
+   }
    public static String toString(byte[] data, int off, int len){
       if(data==null) return null;
       StringBuilder sb=new StringBuilder("[");
       for(int i=0;i<len;i++){
          if(sb.length()>1) sb.append(',');
-         sb.append((data[off+i]));
+         sb.append(data[off+i]&0xff);
       }
       sb.append("]");
       return sb.toString();
    }
    
+   public static String toString(int[] data){
+      return toString(data,0,data.length);
+   }
+   public static String toString(int[] data, int off, int len){
+      if(data==null) return null;
+      StringBuilder sb=new StringBuilder("[");
+      for(int i=0;i<len;i++){
+         if(sb.length()>1) sb.append(',');
+         sb.append(data[off+i]);
+      }
+      sb.append("]");
+      return sb.toString();
+   }
+   
+   public static String toHexString(byte[] data){
+      return toHexString(data,0,data.length);
+   }
    public static String toHexString(byte[] data, int off, int len){
       if(data==null) return null;
       StringBuilder sb=new StringBuilder("");
@@ -94,6 +114,12 @@ public class Util{
          n>>>=10;
       }
       return Long.toString(n)+" KMGTP".charAt(scale);
+   }
+   
+   public static int max(int[] v){
+      int max=v[0];
+      for(int i=1;i<v.length;i++) max=Math.max(max,v[i]);
+      return max;
    }
    
    public static void main(String[] args){

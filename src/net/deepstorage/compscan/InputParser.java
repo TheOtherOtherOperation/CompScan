@@ -19,6 +19,7 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Queue;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 import java.lang.reflect.Field;
 import net.deepstorage.compscan.util.*;
 
@@ -51,12 +52,12 @@ public class InputParser {
 	
 	private Map<String, Boolean> assigned;
 	
-	private double ioRate;
+	private Double ioRate;
 	private Path pathIn;
 	private Path pathOut;
    private ScanMode scanMode;
    private Object scanModeArg;
-   private int blockSize;
+   private int[] blockSizes;
 	private int superblockSize;
 	private String formatString;
 	private int bufferSize;
@@ -77,7 +78,6 @@ public class InputParser {
 		
 		this.compScan = compScan;
 		scanMode = ScanMode.NORMAL;
-		ioRate = compScan.getIORate();
 		bufferSize = CompScan.ONE_MB;
 		overwriteOK = false;
 		printHashes = false;
@@ -121,9 +121,11 @@ public class InputParser {
       checkOptionals();
       checkPositionals();
       
+System.out.println("IP.parse(): compScan="+compScan);
       compScan.setup(
-         ioRate, pathIn, pathOut, scanMode, scanModeArg, blockSize, superblockSize, 
-         bufferSize, overwriteOK, compressor, printHashes, verbose, printUsage, logPath
+         ioRate, pathIn, pathOut, scanMode, scanModeArg,
+         blockSizes, superblockSize, bufferSize, overwriteOK, 
+         compressor, printHashes, verbose, printUsage, logPath
 		);
 		printConfig();
       
@@ -183,10 +185,12 @@ public class InputParser {
 		// Block size.
 		case "blockSize":
 			try {
-				blockSize = Integer.parseInt(arg);
-				if (blockSize < 1) {
-					throw new NumberFormatException();
-				}
+			   String[] s=arg.split(",");
+				blockSizes=new int[s.length];
+            for(int i=0;i<s.length;i++){
+               blockSizes[i]=Util.parseSize(s[i]).intValue();
+               if(blockSizes[i] < 1) throw new NumberFormatException(s[i]);
+            }
 			} catch (NumberFormatException ex) {
 				throw new IllegalArgumentException(
 						String.format(
@@ -198,9 +202,10 @@ public class InputParser {
 		case "superblockSize":
 			try {
 				superblockSize = Integer.parseInt(arg);
-				if (superblockSize < 1 || superblockSize < blockSize) {
-					throw new NumberFormatException();
-				}
+            int maxBs=Arrays.stream(blockSizes).max().getAsInt();
+            if (superblockSize < 1 || superblockSize < maxBs) throw new NumberFormatException(
+               superblockSize+" ("+maxBs+")"
+            );
 			} catch (NumberFormatException ex) {
 				throw new IllegalArgumentException(
 						String.format(
@@ -212,7 +217,7 @@ public class InputParser {
 		// Compression format.
 		case "formatString":
 			formatString = arg;
-			compressor = new Compressor(blockSize, superblockSize, formatString);
+			compressor = new Compressor(superblockSize, formatString);
 			break;
 		// Default.
 		default:
@@ -281,10 +286,9 @@ public class InputParser {
 					throw new NumberFormatException();
 				}
 			} catch (NumberFormatException ex) {
-				throw new IllegalArgumentException(
-						String.format(
-								"Optional parameter rate requires nonnegative integer (default: %1$f = unlimited MB/sec).",
-								CompScan.UNLIMITED));
+				throw new IllegalArgumentException(String.format(
+               "Optional parameter rate requires nonnegative integer, MB/sec (default: unlimited)."
+            ));
 			}
 			break;
 		// Input buffer size.
@@ -427,11 +431,11 @@ public class InputParser {
             "    - verbose:           %11$s%n"+
             "    - map type:          %12$s%n"+
             "    - threads:           %13$s%n",
-            (ioRate == CompScan.UNLIMITED ? "UNLIMITED" : Double.toString(ioRate)),
+            (ioRate == null ? "UNLIMITED" : Double.toString(ioRate)),
 				pathIn,
 				pathOut,
 				scanMode.toString(),
-				blockSize,
+				blockSizes,//todo
 				superblockSize,
 				bufferSize,
 				Boolean.toString(overwriteOK),

@@ -33,7 +33,7 @@ public class SHA1Encoder {
       }
    }
    
-   public static byte[] encode(byte[] in) throws Exception{
+   public static byte[] encode(byte[] in){
       byte[] md=new byte[MD_SIZE];
       encode(in,md);
       return md;

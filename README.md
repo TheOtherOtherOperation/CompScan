@@ -95,10 +95,12 @@ Advanced map options:
 
 The program stores approximately 100 bytes of data per unique hash, in addition to some comparatively  small amount (< 20MB) of internal state. If run on a large data store, it is very possible for the hash map to overrun the default heap memory (around 250MB in 32-bit Java). Besides that, too many objects in java heap space make garbage collection much harder, causing significant performance degradation. 
 To avoid such problems the new type of map implementation was introduced, which keeps data out of java heap, in native memory, which in turn may be either plain RAM of memory-mapped files.
-To switch between the map implementations use the --mapType option with following values:
+To switch between the map implementations use the --mapType option with following values:  
+```
  --mapType java     - standard java HashMap. Retained as a reference.  
  --mapType direct   - off-heap map over plain RAM.   
  --mapType fs       - toff-heap map over memory-mapped files. The default type.  
+```
 
 The fs-type map is operated over multiple temp files created in its home directory. The default directory is <user home>/.compscan/map and can be specified with --mapDir option. The files are normally deleted on application exit, but may be left undeleted upon abnormal termination, so it is recommended to periodically clean this directory.
 

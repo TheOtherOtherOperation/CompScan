@@ -11,10 +11,11 @@ import net.deepstorage.compscan.CompScan.MutableCounter;
 import net.deepstorage.compscan.CompScan.Results;
 
 import java.util.Date;
+import java.util.concurrent.atomic.AtomicLong;
 import java.io.*;
 import java.text.*;
 import java.nio.file.Path;
-
+import java.util.stream.Stream;
 
 /**
  * Provides interactive console output for CompScan.
@@ -25,11 +26,11 @@ import java.nio.file.Path;
 public class ConsoleDisplayThread extends Thread {
    private static final DateFormat df=new SimpleDateFormat("MM/dd/yy HH:mm:ss");
    
-	private Results results;
+	private Results[] results;
 	private String lastString;
 	private long startTime;
 	private long elapsedTime;
-	private MutableCounter hashCounter;
+	private AtomicLong[] hashCounters;
 	private boolean printUsage;
    private Path logFile;
    private PrintWriter log;
@@ -40,11 +41,11 @@ public class ConsoleDisplayThread extends Thread {
 	 * @param results Results object for which to display output.
 	 */
 	public ConsoleDisplayThread(
-	   Results results, MutableCounter hashCounter, boolean printUsage,
+      Results[] results, AtomicLong[] hashCounters, boolean printUsage,
       Path logFile
 	){
 		this.results = results;
-		this.hashCounter = hashCounter;
+		this.hashCounters = hashCounters;
 		lastString = "";
 		startTime = System.currentTimeMillis();
 		this.printUsage = printUsage;
@@ -116,12 +117,13 @@ public class ConsoleDisplayThread extends Thread {
 		if (printUsage) {
 			usageString = String.format("    Memory estimate (free/alloc/max/total): %s", getMemoryEstimates());
 		}
+      Results fileStat=results[results.length-1];
 		String s = String.format("Elapsed time: %1$d sec    Files read: %2$d    Megabytes read: %3$.2f    " +
-								 "Unique hashes: %4$d%5$s",
+								 "Unique hashes: %4$s%5$s",
 				elapsedTime / 1000,
-				results.get("files read"),
-				((float) results.get("bytes read"))/((float) CompScan.ONE_MB),
-				hashCounter.getCount(),
+            fileStat.get("files read"),
+            ((float) fileStat.get("bytes read"))/((float) CompScan.ONE_MB),
+            String.join("/",Stream.of(hashCounters).map(hc->(String)hc.toString()).toArray(size->new String[size])),
 				usageString);
 		lastString = s;
 		System.out.print(s);

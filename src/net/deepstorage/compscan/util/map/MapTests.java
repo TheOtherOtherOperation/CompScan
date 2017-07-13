@@ -85,9 +85,9 @@ public class MapTests {
          //kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,10,24).open()
          kSize->vSize->addSize->new FsMap(kSize,vSize,addSize,10,24,tmpDir).open()
       ;
-      simpleTest(sup);
-      testRand();
-      compare();
+//      simpleTest(sup);
+//      testRand();
+//      compare();
       speed(sup);
       //size();
    }
