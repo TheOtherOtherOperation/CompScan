@@ -2,17 +2,17 @@ package net.deepstorage.compscan.util;
 
 import java.io.IOException;
 
-public class TrottleByteStream implements ByteStream{
+public class TrottleByteStream implements MultipartByteStream{
    public static final long CHECK_TIME=50;
    public final long CHECK_BYTES;
    
-   private final ByteStream src;
+   private final MultipartByteStream src;
    private final double bps;
    
    private long lastCheck;
    private long bytes;
    
-   public TrottleByteStream(ByteStream src, double maxBps){
+   public TrottleByteStream(MultipartByteStream src, double maxBps){
       this.src=src;
       bps=maxBps;
       CHECK_BYTES=(long)(CHECK_TIME*0.001*maxBps);
@@ -42,4 +42,11 @@ public class TrottleByteStream implements ByteStream{
       src.close();
    }
    
+   public boolean isEos(){
+      return src.isEos();
+   }
+   
+   public boolean isPartBoundary(){
+      return src.isPartBoundary();
+   }
 }

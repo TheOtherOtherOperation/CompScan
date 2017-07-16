@@ -121,7 +121,6 @@ public class InputParser {
       checkOptionals();
       checkPositionals();
       
-System.out.println("IP.parse(): compScan="+compScan);
       compScan.setup(
          ioRate, pathIn, pathOut, scanMode, scanModeArg,
          blockSizes, superblockSize, bufferSize, overwriteOK, 

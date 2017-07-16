@@ -14,7 +14,7 @@ public class PathByteStream implements MultipartByteStream{
    private final Path root;
    private final Iterator<Path> files;
    private InputStream currentStream;
-   private boolean eof;
+   private boolean eof, eos;
    
    public PathByteStream(String rootPath, Predicate<Path> ... filters) throws IOException{
       this(Paths.get(rootPath), filters);
@@ -32,25 +32,26 @@ public class PathByteStream implements MultipartByteStream{
       return paths.iterator();
    }
    
-   //read exactly len bytes, if available
-   //on file boundary return bytes read so far
-   //on end of data return bytes read so far or -1
+   //read 0...len bytes, if available, return their number
+   //(may be less than requested)
+   //don't read past file boundaries
    public int read(byte[] buf, int off, int len) throws IOException{
-      if(currentStream==null && !nextStream()) return -1;
-      int c=0;
-      while(c<len){
-         int n=currentStream.read(buf,off+c,len-c);
-         if(n>=0){
-            eof=false;
-            c+=n;
-         }
-         else{
-            eof=true;
-            if(nextStream()) return c;
-            return c==0? -1: c;
-         }
+      if(currentStream==null){
+         if(eos) throw new IOException("reading past EOS");
+         if(!nextStream()) return 0;
       }
+      int c=currentStream.read(buf,off,len);
+      if(c==-1){
+         nextStream();
+         eof=true;
+         return 0;
+      }
+      eof=false;
       return c;
+   }
+   
+   public boolean isEos(){
+      return eos;
    }
    
    public boolean isPartBoundary(){
@@ -63,7 +64,10 @@ public class PathByteStream implements MultipartByteStream{
    
    private boolean nextStream() throws IOException{
       closeCurrent();
-      if(!files.hasNext()) return false;
+      if(!files.hasNext()){
+         eos=true;
+         return false;
+      }
       currentStream=new BufferedInputStream(Files.newInputStream(files.next()));
       return true;
    }
@@ -77,16 +81,18 @@ public class PathByteStream implements MultipartByteStream{
    }
    
    public static void main(String[] args) throws Exception{
-      PathByteStream in=new PathByteStream("../testdata/in/alpha");
+      //PathByteStream in=new PathByteStream("../testdata/in/tiny");
+      PathByteStream in=new PathByteStream("../testdata/in/small");
       byte[] buf=new byte[1000];
       int tc=0;
       int blocks=0;
       for(;;){
-         int c=in.read(buf,0,2);
+         //int c=in.read(buf,0,2);
+         int c=in.read(buf);
          System.out.println(" <- "+c);
-         if(c>0) tc+=c;
-         if(in.isPartBoundary()) System.out.println("eof! tc="+tc);
-         if(c==-1) break;
+         tc+=c;
+         if(in.isPartBoundary()) System.out.println("<file boundary at "+tc+">");
+         if(in.isEos()) break;
 //         if(blocks<1000){
 //            String s= c<=30?
 //               net.deepstorage.compscan.util.Util.toString(buf,0,c):

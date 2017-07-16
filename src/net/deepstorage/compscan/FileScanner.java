@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Date;
 import java.util.Arrays;
 import java.util.List;
@@ -52,6 +53,7 @@ public class FileScanner {
    ){
       if(blockSizes.length!=totals.length) throw new IllegalArgumentException(blockSizes.length+"!="+totals.length);
       if(hashCounters.length!=blockSizes.length) throw new IllegalArgumentException(hashCounters.length+"!="+blockSizes.length);
+      if(Math.max(Util.max(blockSizes),superblockSize)>bufferSize) throw new IllegalArgumentException(Math.max(Util.max(blockSizes),superblockSize)+">"+bufferSize);
       this.root = root;
       this.blockSizes = blockSizes;
       this.superblockSize=superblockSize;
@@ -71,7 +73,7 @@ public class FileScanner {
 	 * @throws NoNextFileException if file root contains no regular files.
 	 */
 	public void scanCombined() throws IOException{
-      MultipartByteStream pathStream=new PathByteStream(root){
+      MultipartByteStream src=new PathByteStream(root){
          protected Iterator<Path> toIterator(Stream<Path> paths) throws IOException{
             int[] pathCount=new int[1];
             paths=paths.map(path->{
@@ -90,19 +92,14 @@ public class FileScanner {
             return i;
          }
       };
-      MultipartByteStream src=pathStream;
       if(ioRate!=null){
-         src=new MultipartByteStream.Adapter(new TrottleByteStream(src,ioRate)){
-            @Override
-            public boolean isPartBoundary(){
-               return pathStream.isPartBoundary();
-            }
-         };
+         src=new TrottleByteStream(src,ioRate);
       }
       scanStream(src, null);
    }
    
    private void scanStream(MultipartByteStream src, Results[] results) throws IOException{
+//System.out.println("scanStream(...)");
       if(results!=null && results.length!=totals.length) throw new IllegalArgumentException(results.length+"!="+totals.length);
       final int chunkSize=bufferSize;
       final int bufferSize=chunkSize+Math.max(superblockSize, Util.max(blockSizes));
@@ -112,18 +109,19 @@ public class FileScanner {
       JobGroup jg=new JobGroup();
       for(;;){
          byte[] buffer=new byte[bufferSize];
-         int c=src.read(buffer,0,chunkSize);
+         int c=src.readFully(buffer,0,chunkSize,false);
 //System.out.println("  read "+c+" bytes");
          scheduleBuffer(
             buffer,c,prevBuffer,prevSize,remainders,src.isPartBoundary(),results,jg
          );
 //System.out.println("    scheduled");
-         if(c==-1) break;//eos
+         if(src.isEos()) break;//eos
          prevBuffer=buffer;
          prevSize=c;
       }
 //System.out.println("  done");
       jg.waitAll();
+//System.out.println("  scanStream() done");
    }
 
 static int blockCount=0;   
@@ -153,7 +151,7 @@ static int blockCount=0;
                buffer,size,prevBuffer,prevSize,rem,blockSize,isFileBoundary,
                block->{
 //byte[] hash=SHA1Encoder.encode(block);
-//System.out.println("  block "+(blockCount++)+": "+Util.toString(block,0,20)+" -> "+Util.toHexString(hash));
+//System.out.println("  block "+(blockCount++)+": "+Util.toString(block,0,Math.min(20,blockSize))+" -> "+Util.toHexString(hash));
 //hashes.add(hash);
                   hashes.add(SHA1Encoder.encode(block));
                }
@@ -189,10 +187,13 @@ static int blockCount=0;
       final byte[] block=new byte[blockSize];
       int off=0;
       if(remainder>0){
-         System.arraycopy(prevBuffer, prevBuffer.length-remainder, block, 0, remainder);
-         System.arraycopy(buffer, 0, block, remainder, blockSize-remainder);
+         System.arraycopy(prevBuffer, prevSize-remainder, block, 0, remainder);
+         //new data may be less than needed for whole block (only in the case of file boundary)
+         int rest=Math.min(size,blockSize-remainder);
+         System.arraycopy(buffer, 0, block, remainder, rest);
          op.accept(block);
-         off=blockSize-remainder;
+         off=rest;
+         size-=rest;
       }
       while(size>=blockSize){
          System.arraycopy(buffer, off, block, 0, blockSize);
@@ -210,11 +211,13 @@ static int blockCount=0;
    public void scanSeparately(
       List<Results[]> fileResults, CompScan cs, Predicate<Path> fileFilter, boolean printHashes
    ) throws IOException{
+//System.out.println("scanSeparately(...)");
       Stream<Path> fs=Files.walk(root).filter(path->!Files.isDirectory(path));
       if(fileFilter!=null) fs=fs.filter(fileFilter);
       Iterator<Path> files=fs.iterator();
       while(files.hasNext()){
          Path path=files.next();
+//System.out.println("  next path: "+path);
          File file=path.toFile();
          long flen=file.length();
          Results[] results=new Results[blockSizes.length];
@@ -229,20 +232,25 @@ static int blockCount=0;
          for(AtomicLong hc:hashCounters) hc.set(0);
          try{
             scanStream(
-               new MultipartByteStream.Adapter(
-                  ByteStream.Util.convert(Files.newInputStream(path))
-               ), results
+               MultipartByteStream.convert(Files.newInputStream(path)), results
             );
             for(Results r:results){
                r.set("files read", 1L);
                if(printHashes) r.printHashes();
             }
-            cs.writeHashResults(results, path.relativize(root));
+            cs.writeHashResults(results, root.relativize(path));
          }
          finally{
             for(Results r:results) r.releaseHashes();
          }
          fileResults.add(results);
       }
+   }
+   
+   public static void main(String[] args){
+      Path root=Paths.get("../testdata/in/small");
+      Path path=Paths.get("../testdata/in/small/1.png");
+      System.out.println(path.relativize(root));
+      System.out.println(root.relativize(path));
    }
 }

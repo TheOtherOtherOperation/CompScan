@@ -355,10 +355,11 @@ public class CompScan {
    
    public void writeHashResults(Results[] results, Path path) throws IOException{
       final String fs=path.getFileSystem().getSeparator();
-      for(int i=0;i<results.length;){
+      for(int i=0;i<results.length;i++){
          Results r=results[i];
          String fileName=
-            path.toString().replace(fs,"_")+"_"+r.get("block size")+".hash.csv"
+            //path.toString().replace(fs,"_")+"_"+r.get("block size")+".hash.csv"
+            path.toString().replace(fs,"_")+"_"+blockSizes[i]+".hash.csv"
          ;
          writeResults(fileName, r.makeHashCounterString(), overwriteOK);
       }
@@ -470,10 +471,13 @@ public class CompScan {
 	public static void main(String[] args) throws Exception{
 //if(args.length==0){
 //   String testdata= new File("testdata").exists()? "testdata": "../testdata";
-//   //args=new String[]{testdata+"/in/all",testdata+"/out","1000","10000","None"};
+//   //args=new String[]{testdata+"/in/all",testdata+"/out","1000,1500,2000","10000","None"};
 //   args=new String[]{
-//      "--hashes","--overwrite",
+//      //"--hashes","--overwrite",
+//      "--mode", "BIG", "50k",
 //      testdata+"/in/small",testdata+"/out","1000,1500,2000","10000","LZ4:0"
+////      "--buffer-size","5",
+////      testdata+"/in/tiny",testdata+"/out","3","4","None"
 //   };
 //}
       CompScan cs = null;
@@ -801,9 +805,9 @@ public class CompScan {
                counters.put(count, n==null? 1L: n+1L);
             }
 			});
-System.out.println("CS.Results.getHashCounters():");
-System.out.println(" hashes: "+hashes.size());
-System.out.println(" counters: "+counters);
+//System.out.println("CS.Results.getHashCounters():");
+//System.out.println(" hashes: "+hashes.size());
+//System.out.println(" counters: "+counters);
          return counters;
 		}
 		
