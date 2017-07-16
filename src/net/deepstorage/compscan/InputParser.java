@@ -434,7 +434,7 @@ public class InputParser {
 				pathIn,
 				pathOut,
 				scanMode.toString(),
-				blockSizes,//todo
+				Util.toString(blockSizes),
 				superblockSize,
 				bufferSize,
 				Boolean.toString(overwriteOK),
