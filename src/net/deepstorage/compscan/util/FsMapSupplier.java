@@ -7,14 +7,14 @@ public class FsMapSupplier extends DirectMapSupplier{
    private final File dir;
    
    public FsMapSupplier(
-      int mdSize, int listSize, int logChunkSize, long maxDataSize, File dir
+      int mdSize, int listSize, int chunkSize, long maxDataSize, File dir
    ){
-      super(mdSize, listSize, logChunkSize, maxDataSize);
+      super(mdSize, listSize, chunkSize, maxDataSize);
       this.dir=dir;
    }
    
    public MdMap get(){
-      return get(new FsMap(mdSize, 8, addrSize, listSize, logChunkSize,dir));
+      return get(new FsMap(mdSize, 8, addrSize, listSize, chunkSize, dir));
    }
    
    public String toString(){

@@ -68,7 +68,7 @@ public class PathByteStream implements MultipartByteStream{
          eos=true;
          return false;
       }
-      currentStream=new BufferedInputStream(Files.newInputStream(files.next()));
+      currentStream=Files.newInputStream(files.next());
       return true;
    }
    

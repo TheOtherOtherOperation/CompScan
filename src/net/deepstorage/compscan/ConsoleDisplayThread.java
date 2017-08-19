@@ -117,7 +117,7 @@ public class ConsoleDisplayThread extends Thread {
 		if (printUsage) {
 			usageString = String.format("    Memory estimate (free/alloc/max/total): %s", getMemoryEstimates());
 		}
-      Results fileStat=results[results.length-1];
+      Results fileStat=results[0];
 		String s = String.format("Elapsed time: %1$d sec    Files read: %2$d    Megabytes read: %3$.2f    " +
 								 "Unique hashes: %4$s%5$s",
 				elapsedTime / 1000,

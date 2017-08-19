@@ -38,9 +38,10 @@ public class InputParser {
 		"formatString"
 	};
 	
-   private static long MAP_MEMORY_MAX=128*1024L*1024L*1024L*1024L;//128T: upper limit
-   private static long MAP_MEMORY_CHUNK=128*1024L*1024L; //128M
-   private static int MAP_LIST_SIZE=9;
+   private static long MAP_MEMORY_MAX=1L<<47;  //128T: upper limit
+   private static int MAP_MEMORY_CHUNK=1<<27; //128M
+   //private static int MAP_LIST_SIZE=9; //faster but lower capacity (<RAM size>/130 hashes)
+   private static int MAP_LIST_SIZE=50; //slower but higher capacity (<RAM size>/40 hashes)
    private static File MAP_DIR=new File(System.getProperty("user.dir"),".compscan/map");
    static{
       if(!MAP_DIR.exists()) MAP_DIR.mkdirs();
@@ -200,7 +201,7 @@ public class InputParser {
 		// Superblock size.
 		case "superblockSize":
 			try {
-				superblockSize = Integer.parseInt(arg);
+            superblockSize = Util.parseSize(arg).intValue();
             int maxBs=Arrays.stream(blockSizes).max().getAsInt();
             if (superblockSize < 1 || superblockSize < maxBs) throw new NumberFormatException(
                superblockSize+" ("+maxBs+")"
@@ -327,13 +328,13 @@ public class InputParser {
             case "direct":
                sup=new DirectMapSupplier(
                   SHA1Encoder.MD_SIZE, MAP_LIST_SIZE,
-                  Util.log(MAP_MEMORY_CHUNK), MAP_MEMORY_MAX
+                  MAP_MEMORY_CHUNK, MAP_MEMORY_MAX
                );
                break;
             case "fs":
                sup=new FsMapSupplier(
                   SHA1Encoder.MD_SIZE, MAP_LIST_SIZE,
-                  Util.log(MAP_MEMORY_CHUNK), MAP_MEMORY_MAX, MAP_DIR
+                  MAP_MEMORY_CHUNK, MAP_MEMORY_MAX, MAP_DIR
                );
                break;
             default: throw new IllegalArgumentException("Illegal option for map type: "+type);
@@ -359,7 +360,11 @@ public class InputParser {
          if(!it.hasNext()) throw new IllegalArgumentException(
             "Reached end of arguments for map chunk"
          );
-         MAP_MEMORY_CHUNK=Util.parseSize(it.next());
+         long size=Util.parseSize(it.next());
+         if(size>Integer.MAX_VALUE) throw new IllegalArgumentException(
+            "mapMemoryChunk ("+size+") cannot exceed "+Integer.MAX_VALUE
+         );
+         MAP_MEMORY_CHUNK=(int)size;
          break;
       case "--mapListSize":
          if(!it.hasNext()) throw new IllegalArgumentException(
@@ -388,7 +393,7 @@ public class InputParser {
       if(CompScan.bigMapSupplier==null){
          CompScan.bigMapSupplier=new FsMapSupplier(
             SHA1Encoder.MD_SIZE, MAP_LIST_SIZE,
-            Util.log(MAP_MEMORY_CHUNK), MAP_MEMORY_MAX, MAP_DIR
+            MAP_MEMORY_CHUNK, MAP_MEMORY_MAX, MAP_DIR
          );
       }
    }

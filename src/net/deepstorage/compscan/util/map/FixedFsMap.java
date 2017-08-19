@@ -6,16 +6,15 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import net.deepstorage.compscan.util.Util;
 
-
-public class FsMap extends DirectMap{
+public class FixedFsMap extends FixedDirectMap{
    private final List<Object[]> files=new ArrayList<>();
    private final File dir;
    
-   public FsMap(
+   public FixedFsMap(
       int keySize, int valueSize, int addrSize,
-      int maxListSize, int bufSize, File dir
+      int maxListSize, int size, File dir
    ){
-      super(keySize, valueSize, addrSize, maxListSize, bufSize);
+      super(keySize, valueSize, addrSize, maxListSize, size);
       this.dir=dir;
    }
    

@@ -124,7 +124,6 @@ public class FileScanner {
 //System.out.println("  scanStream() done");
    }
 
-static int blockCount=0;   
    //asyncronously scan supreblock + remainders from prev supreblock scan
    private void scheduleBuffer(
       byte[] buffer, final int size, byte[] prevBuffer, final int prevSize,
@@ -215,6 +214,7 @@ static int blockCount=0;
       Stream<Path> fs=Files.walk(root).filter(path->!Files.isDirectory(path));
       if(fileFilter!=null) fs=fs.filter(fileFilter);
       Iterator<Path> files=fs.iterator();
+      int filesRead=0;
       while(files.hasNext()){
          Path path=files.next();
 //System.out.println("  next path: "+path);
@@ -239,6 +239,8 @@ static int blockCount=0;
                if(printHashes) r.printHashes();
             }
             cs.writeHashResults(results, root.relativize(path));
+            filesRead++;
+            for(Results r: totals) r.set("files read", filesRead);
          }
          finally{
             for(Results r:results) r.releaseHashes();

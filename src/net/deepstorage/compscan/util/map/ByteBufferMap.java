@@ -21,12 +21,13 @@ public abstract class ByteBufferMap extends DataMap{
 //public int matches;
    
    public ByteBufferMap(
-      int keySize, int valueSize, int addrSize, int maxListSize, int logBufSize
+      int keySize, int valueSize, int addrSize, int maxListSize, int bufSize
    ){
       super(keySize, valueSize, addrSize, maxListSize);
-      this.logBufSize=logBufSize;
-      bufSize=1<<logBufSize;
-      bufSizeMask=bufSize-1;
+      if(bufSize<=0) throw new IllegalArgumentException("unsupported bufSize: "+bufSize);
+      this.bufSize=bufSize;
+      logBufSize=Util.log(bufSize);
+      bufSizeMask=(1<<logBufSize)-1;
       maxBufCount=1<<(addrSize*8-logBufSize);
    }
    
@@ -50,21 +51,22 @@ public abstract class ByteBufferMap extends DataMap{
       }
       int bufInd=data.size()-1;
       if(clear) clearNewBlock(data.get(bufInd), currOff, size);
-      long v=(bufInd<<logBufSize)|currOff;
+//      long v=(bufInd<<logBufSize)|currOff;
+      long v=(((long)bufInd)<<logBufSize)|currOff;
       currOff+=size;
       return v;
    }
    
    protected long read(long blockAddr, int off, int bytes){
 //reads++;
-      ByteBuffer buf=data.get((int)(blockAddr>>logBufSize));
+      ByteBuffer buf=data.get((int)(blockAddr>>>logBufSize));
       int p=(int)(blockAddr&bufSizeMask)+off;
       return buf.getLong(p)&(-1L>>>((8-bytes)<<3));
    }
    
    protected int read(long blockAddr, int off, byte[] out, int outOff, int bytes){
 //reads++;
-      ByteBuffer buf=data.get((int)(blockAddr>>logBufSize));
+      ByteBuffer buf=data.get((int)(blockAddr>>>logBufSize));
       buf.position((int)(blockAddr&bufSizeMask)+off);
       buf.get(out,outOff,bytes);
       return bytes;
@@ -72,7 +74,7 @@ public abstract class ByteBufferMap extends DataMap{
    
    protected void write(long blockAddr, int off, long value, int bytes){
 //writes++;
-      ByteBuffer buf=data.get((int)(blockAddr>>logBufSize));
+      ByteBuffer buf=data.get((int)(blockAddr>>>logBufSize));
       int p=(int)(blockAddr&bufSizeMask)+off;
       long v=buf.getLong(p);
       long loMask=-1L>>>((8-bytes)<<3);
@@ -81,14 +83,14 @@ public abstract class ByteBufferMap extends DataMap{
    
    protected void write(long blockAddr, int off, byte[] in, int inOff, int bytes){
 //writes++;
-      ByteBuffer buf=data.get((int)(blockAddr>>logBufSize));
+      ByteBuffer buf=data.get((int)(blockAddr>>>logBufSize));
       buf.position((int)(blockAddr&bufSizeMask)+off);
       buf.put(in,inOff,bytes);
    }
    
    protected boolean matches(long blockAddr, int off, byte[] key, int keyOff, int keySize){
 //matches++;
-      ByteBuffer buf=data.get((int)(blockAddr>>logBufSize));
+      ByteBuffer buf=data.get((int)(blockAddr>>>logBufSize));
       int p=(int)(blockAddr&bufSizeMask)+off;
       int shift=0;
       while((keySize-shift)>=8){
@@ -110,15 +112,19 @@ public abstract class ByteBufferMap extends DataMap{
    }
    
    public long dataSize(){
-      return (data.size()-1)*bufSize+currOff;
+      if(data==null) return -1;
+      return (data.size()-1L)*bufSize+currOff;
    }
    
    public String toString(boolean data, boolean structure){
       List<ByteBuffer> list=this.data;
+      int size= list==null? -1: list.size();
       String s=
          "DirM(\n"+
          "  bufSize="+bufSize+"\n"+
-         "  N buffers="+this.data.size()+"\n"+
+         "  logBufSize="+logBufSize+"\n"+
+         "  maxBufCount="+maxBufCount+"\n"+
+         "  N buffers="+size+"\n"+
          "  currOff="+currOff+"\n"+
          "  data size="+dataSize()+"\n"+
          ")"
@@ -137,7 +143,7 @@ public abstract class ByteBufferMap extends DataMap{
    }
    
    public String toString(){
-      return toString(true,true);
+      return toString(false,false);
    }
    
    public static void main(String[] args){

@@ -82,18 +82,20 @@ public class MapTests {
       File tmpDir=new File("mem");
       if(!tmpDir.exists()) tmpDir.mkdir();
       Function<Integer,Function<Integer,Function<Integer,DataMap>>> sup=
-         //kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,10,24).open()
-         kSize->vSize->addSize->new FsMap(kSize,vSize,addSize,10,24,tmpDir).open()
+         //kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,10,1<<24).open()
+         kSize->vSize->addSize->new FsMap(kSize,vSize,addSize,10,1<<24,tmpDir).open()
       ;
 //      simpleTest(sup);
 //      testRand();
 //      compare();
-      speed(sup);
+//      speed(sup);
+      
+      speedSha1(3_000_000, 3);
       //size();
    }
    
    static void simpleTest(){
-      simpleTest(kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,10,17).open());
+      simpleTest(kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,10,1<<17).open());
    }
    static void simpleTest(Function<Integer,Function<Integer,Function<Integer,DataMap>>> sup){
       DataMap map=sup.apply(4).apply(8).apply(5);
@@ -120,7 +122,7 @@ public class MapTests {
    }
    
    static void testRand(){
-      testRand(kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,10,17).open());
+      testRand(kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,10,1<<17).open());
    }
    static void testRand(Function<Integer,Function<Integer,Function<Integer,DataMap>>> sup){
       byte[] data=new byte[1<<20];
@@ -213,7 +215,7 @@ public class MapTests {
    }
    
    static void compare(){
-      compare(kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,10,17).open());
+      compare(kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,10,1<<17).open());
    }
    static void compare(Function<Integer,Function<Integer,Function<Integer,DataMap>>> sup){
       HashMap<Integer,Integer> map1=new HashMap<>();
@@ -273,7 +275,7 @@ public class MapTests {
    }
    
    static void speed(){
-      size(kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,8,24).open());
+      speed(kSize->vSize->addrSize->new DirectMap(kSize,vSize,addrSize,8,1<<24).open());
    }
    static void speed(Function<Integer,Function<Integer,Function<Integer,DataMap>>> sup){
       int N=4_000_000;
@@ -306,8 +308,57 @@ public class MapTests {
       System.out.println("op/s: "+(nput*1000.0/dt));
    }
    
+   static void speedSha1(int nKeys, int nThreads) throws Exception{
+      DataMap[] maps=new DataMap[nThreads];
+      byte[] data=new byte[20];
+      for(int i=nThreads;i-->0;){
+         DataMap map=maps[i]=new DirectMap(20,8,6,10,1<<25).open();
+         DataMap.Cursor c=map.new Cursor();
+         fillRandom(c,data,123,nKeys/4);
+      }
+      
+      Thread[] threads=new Thread[nThreads];
+      for(int i=nThreads;i-->0;){
+         DataMap.Cursor c=maps[i].new Cursor();
+         threads[i]=new Thread(){
+            public void run(){
+               fillRandom(c,new byte[20],123,nKeys);
+            }
+         };
+      }
+      
+      long t0=System.currentTimeMillis();
+      for(int i=nThreads;i-->0;) threads[i].start();
+      for(int i=nThreads;i-->0;) threads[i].join();
+      long dt=System.currentTimeMillis()-t0;
+      
+      System.out.println("nThreads: "+nThreads);
+      System.out.println("size: "+maps[0].size());
+      System.out.println("data size: "+maps[0].dataSize());
+      System.out.println("time: "+dt);
+      System.out.println("op/s: "+(nKeys*1000.0*nThreads/dt));
+   }
+      
+      
+   private static void fillRandom(DataMap.Cursor cursor, byte[] keybuf, int seed, int N){
+      for(int i=N;i-->0;){
+         keybuf[0]=(byte)seed;
+         keybuf[1]=(byte)(seed>>8);
+         keybuf[2]=(byte)(seed>>16);
+         keybuf[3]=(byte)(seed>>24);
+         boolean b=cursor.put(keybuf,0);
+         if(b) cursor.writeValue(0,0,8);
+         else cursor.writeValue(0,cursor.readValue(0,8)+1,8);
+         seed^=seed<<13;
+         seed^=seed>>17;
+         seed^=seed<<5;
+      }
+   }
+      
+   
+   
    static void size(){
-      size(kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,8,24).open());
+      size(kSize->vSize->addSize->new DirectMap(kSize,vSize,addSize,8,1<<24).open());
    }
    static void size(Function<Integer,Function<Integer,Function<Integer,DataMap>>> sup){
       DataMap map=sup.apply(4).apply(8).apply(5);

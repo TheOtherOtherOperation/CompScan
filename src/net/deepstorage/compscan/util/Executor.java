@@ -33,11 +33,27 @@ public class Executor{
    );
    
    public static void exec(Runnable r){
-      executor.execute(r);
+      executor.execute(()->{
+         try{
+            r.run();
+         }
+         catch(Exception e){
+            e.printStackTrace();
+            System.exit(1);
+         }
+      });
    }
    
    public static void shutdown(){
       executor.shutdown();
+   }
+   
+   public static void shutdownNow(){
+      executor.shutdownNow();
+      try{
+         executor.awaitTermination(Long.MAX_VALUE,TimeUnit.SECONDS);
+      }
+      catch(Exception e){}
    }
    
    public static int getPoolSize(){

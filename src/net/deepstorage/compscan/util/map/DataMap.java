@@ -4,7 +4,6 @@ import net.deepstorage.compscan.util.Util;
 import java.util.function.*;
 
 public abstract class DataMap{
-static boolean DEBUG;
    private static final int LIST=1;
    private static final int TABLE=2;
    
@@ -141,8 +140,11 @@ static boolean DEBUG;
          long nextAddr=read(table,off,blockAddrSize);
          return put(nextAddr, level+1, table, off, keyData, keyOff);
       }
+
+public int depth;
       
       public void scan(Consumer<byte[]> feed){
+depth=0;
          scan(dataEntryAddr, keyBuffer, feed);
       }
       
@@ -164,7 +166,9 @@ static boolean DEBUG;
                for(int i=0;i<256;p+=blockAddrSize,i++){
                   long nextAddr=read(blockAddr, p, blockAddrSize);
                   if(nextAddr==0) continue;
+depth++;
                   scan(nextAddr, keyBuf, feed);
+depth--;
                }
                return;
             }

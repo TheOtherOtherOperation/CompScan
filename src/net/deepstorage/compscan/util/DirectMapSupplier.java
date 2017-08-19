@@ -7,17 +7,17 @@ import net.deepstorage.compscan.util.map.*;
 import net.deepstorage.compscan.util.Util;
 
 public class DirectMapSupplier implements Supplier<MdMap>{
-   protected int mdSize, addrSize, listSize, logChunkSize;
+   protected final int mdSize, addrSize, listSize, chunkSize;
    
-   public DirectMapSupplier(int mdSize, int listSize, int logChunkSize, long maxDataSize){
+   public DirectMapSupplier(int mdSize, int listSize, int chunkSize, long maxDataSize){
       this.mdSize=mdSize;
       this.listSize=listSize;
-      this.logChunkSize=logChunkSize;
-      this.addrSize=addrSizeForData(maxDataSize,logChunkSize,listSize);
+      this.chunkSize=chunkSize;
+      this.addrSize=addrSizeForData(maxDataSize,chunkSize,listSize);
    }
    
    public MdMap get(){
-      return get(new DirectMap(mdSize, 8, addrSize, listSize, logChunkSize));
+      return get(new DirectMap(mdSize, 8, addrSize, listSize, chunkSize));
    }
    
    protected MdMap get(DataMap map){
@@ -56,10 +56,11 @@ public class DirectMapSupplier implements Supplier<MdMap>{
    }
    
    public String toString(){
-      return "direct DataMap, addr="+addrSize+", list="+listSize+", chunk="+Util.formatSize(1<<logChunkSize);
+      return "direct DataMap, addr="+addrSize+", list="+listSize+", chunk="+Util.formatSize(chunkSize);
    }
    
-   static int addrSizeForEntries(final long maxSize, final int logChunkSize, final int listSize){
+   static int addrSizeForEntries(final long maxSize, final int chunkSize, final int listSize){
+      final int logChunkSize=Util.log(chunkSize);
       int addrSize0=8, addrSize;
       for(;;){
          int logMaxDataSize=Util.log((8+256*addrSize0)*maxSize/listSize);
@@ -69,13 +70,15 @@ public class DirectMapSupplier implements Supplier<MdMap>{
       }
       return addrSize;
    }
-   static int addrSizeForData(final long maxDataSize, final int logChunkSize, final int listSize){
+   static int addrSizeForData(final long maxDataSize, final int chunkSize, final int listSize){
+      final int logChunkSize=Util.log(chunkSize);
       int logMaxDataSize=Util.log(maxDataSize);
       return ((logChunkSize+7)>>3) + Math.max(1,(logMaxDataSize-logChunkSize+7)>>3);
    }
    
    public static void main(String[] args){
-      System.out.println(addrSizeForEntries(1L<<30,26,8));
-      System.out.println(addrSizeForData(1L<<40,26,8));
+      System.out.println(addrSizeForEntries(1L<<30,1<<26,8));
+      System.out.println(addrSizeForData(1L<<40,1<<26,8));
+      System.out.println(Util.formatSize(1<<27));
    }
 }

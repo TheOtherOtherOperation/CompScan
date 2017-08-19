@@ -8,6 +8,7 @@ public class Util{
    static{
       Runtime.getRuntime().addShutdownHook(new Thread(){
          public void run(){
+            Executor.shutdownNow();
             synchronized(cleanupTasks){
                for(Runnable r:cleanupTasks){
                   try{

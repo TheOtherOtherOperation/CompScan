@@ -35,7 +35,7 @@ import net.deepstorage.compscan.util.*;
 /**
  * CompScan's main class.
  * 
- * @author Ramon A. Lovato
+ * @author Ramon A. Lovato, S.Samokhodkin
  * @version 1.0
  */
 public class CompScan {
@@ -49,7 +49,7 @@ public class CompScan {
    public static Supplier<MdMap> bigMapSupplier;
    
    public static final Supplier<MdMap> mediumMapSupplier=
-      new DirectMapSupplier(20,8,26,1024*1024*1024) //key size 20B, value size 8B, grow in 64M chunks, limit 1G
+      new DirectMapSupplier(20,8,1<<26,1L<<30) //key size 20B, value size 8B, grow in 64M chunks, limit 1G
    ;
    public static final Supplier<MdMap> smallMapSupplier=
       new JavaMapSupplier(20) //use java HashMap
@@ -450,9 +450,14 @@ public class CompScan {
             + "                           Default: 128MiB%n"
             + "         --mapListSize     map's internal parameter, controls the tradeoff%n"
             + "                           between speed and memory consumtion%n"
-            + "                           (both are inversely proportional to it)%n"
-            + "                           Optimal range: 8..20%n"
-            + "                           Default: 9%n"
+            + "                           Speed ~ 1/L%n"
+            + "                           Capacity (entries) = M/L, where%n"
+            + "                             M = system RAM size, bytes%n"
+            + "                             L ~= 30+900/mapListSize, bytes%n"
+            + "                           Optimal ranges:%n"
+            + "                           - 8..20 for faster procesing%n"
+            + "                           - 40..60 for higher capacity%n"
+            + "                           Default: 50 (optimized for capacity)%n"
       );
 	}
    
@@ -474,10 +479,10 @@ public class CompScan {
 //   //args=new String[]{testdata+"/in/all",testdata+"/out","1000,1500,2000","10000","None"};
 //   args=new String[]{
 //      //"--hashes","--overwrite",
-//      "--mode", "BIG", "50k",
-//      testdata+"/in/small",testdata+"/out","1000,1500,2000","10000","LZ4:0"
+//      //"--mode", "BIG", "50k",
+////      testdata+"/in/small",testdata+"/out","1000,1500,2000","10000","LZ4:0"
 ////      "--buffer-size","5",
-////      testdata+"/in/tiny",testdata+"/out","3","4","None"
+//      testdata+"/in/tiny",testdata+"/out","1000","10000","None"
 //   };
 //}
       CompScan cs = null;
