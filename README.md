@@ -40,7 +40,6 @@ Usage: CompScan [-h] [--help] [--pause] [--threads <number>] [--mapType (java|di
 Positional Arguments
     pathIn            path to the dataset
     pathOut           where to save the output
-    blockSize         bytes per block
     blockSize         bytes per block; scanning with multiple block sizes 
                       is supported. Format: one or more integer values
                       separated by commas without spaces;
@@ -89,9 +88,14 @@ Advanced map options:
                      <expected map memory size (see above)>/1000
                      Default: 128MiB
    --mapListSize     map's internal parameter, controls the tradeoff between speed and memory consumtion
-                     (both are inversely proportional to it)
-                     Optimal range: 8..20
-                     Default: 9
+                     Speed ~ 1/L%n"
+                     Capacity (entries) = M/L, where%n"
+                        M = system RAM size, bytes%n"
+                        L ~= 30+900/mapListSize, bytes%n"
+                     Optimal ranges:%n"
+                        8..20 for faster procesing%n"
+                        40..60 for higher capacity%n"
+                     Default: 50 (optimized for capacity)%n"
 ```
 
 
@@ -143,3 +147,13 @@ Suppose we want to create a Zip compression format.
 5. CompressionInterface requires you to override and implement the compress() method: "public byte[] compress(byte[] data, int blockSize) { ... }". This method expects to receive a data buffer (data) of exactly one superblock in size and should return a (smaller) buffer containing the compressed data.
 
 Completing these steps successfully will cause the new compression class to be detected the next time the project is compiled. You may then access it by specifying "Zip" (case-sensitive) as the format argument on the command line.
+
+##Speed considerations
+There are 2 different cases (hold for fs and direct map types):
+1. The map fits into available system RAM
+The normal speed is 100-1000 kiloblocks/sec. The bottleneck is the speed of RAM for random IOs.
+2. The map doesn't fit into the RAM.
+The speed drops to less than 1 kiloblock/s.
+The bottleneck is HDD random access speed.
+To make the map more capable, use higher value for mapListSize (see above).
+
