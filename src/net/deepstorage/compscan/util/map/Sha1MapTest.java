@@ -81,7 +81,8 @@ public class Sha1MapTest{
          text[6]=(byte)(v>>48);
          text[7]=(byte)(v>>56);
          
-         SHA1Encoder.encode(text,hash);
+System.arraycopy(text,0,hash,0,8);
+//         SHA1Encoder.encode(text,hash);
          boolean b=cursor.put(hash,0);
          if(b) cursor.writeValue(0,0L,8);
          else cursor.writeValue(0,cursor.readValue(0,8)+1,8);
@@ -101,7 +102,8 @@ public class Sha1MapTest{
             t0=t1;
          }
          
-         v*=3;
+v*=131;
+//         v*=3;
       }
       
       long[] dsum=new long[1],dnum=new long[1];

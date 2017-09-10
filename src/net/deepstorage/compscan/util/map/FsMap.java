@@ -24,7 +24,7 @@ public class FsMap extends DirectMap{
          File f=File.createTempFile("compscan","map",dir);
          RandomAccessFile raf=new RandomAccessFile(f,"rw");
          try{
-            ByteBuffer bb=raf.getChannel().map(FileChannel.MapMode.PRIVATE,0,size);
+            ByteBuffer bb=raf.getChannel().map(FileChannel.MapMode.READ_WRITE,0,size);
             files.add(new Object[]{f,raf});
             return bb;
          }
