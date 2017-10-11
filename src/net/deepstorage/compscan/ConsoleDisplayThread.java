@@ -10,6 +10,13 @@ package net.deepstorage.compscan;
 import net.deepstorage.compscan.CompScan.MutableCounter;
 import net.deepstorage.compscan.CompScan.Results;
 
+import java.util.Date;
+import java.util.concurrent.atomic.AtomicLong;
+import java.io.*;
+import java.text.*;
+import java.nio.file.Path;
+import java.util.stream.Stream;
+
 /**
  * Provides interactive console output for CompScan.
  * 
@@ -17,28 +24,42 @@ import net.deepstorage.compscan.CompScan.Results;
  * @version 1.0
  */
 public class ConsoleDisplayThread extends Thread {
-	private Results results;
+   private static final DateFormat df=new SimpleDateFormat("MM/dd/yy HH:mm:ss");
+   
+	private Results[] results;
 	private String lastString;
 	private long startTime;
 	private long elapsedTime;
-	private MutableCounter hashCounter;
+	private AtomicLong[] hashCounters;
 	private boolean printUsage;
+   private Path logFile;
+   private PrintWriter log;
 	
 	/**
 	 * Constructor.
 	 * 
 	 * @param results Results object for which to display output.
 	 */
-	public ConsoleDisplayThread(Results results, MutableCounter hashCounter, boolean printUsage) {
+	public ConsoleDisplayThread(
+      Results[] results, AtomicLong[] hashCounters, boolean printUsage,
+      Path logFile
+	){
 		this.results = results;
-		this.hashCounter = hashCounter;
+		this.hashCounters = hashCounters;
 		lastString = "";
 		startTime = System.currentTimeMillis();
 		this.printUsage = printUsage;
+      this.logFile=logFile;
 	}
 
 	@Override
-	public void run() {
+	public void run(){
+      if(logFile!=null) try{
+         log=new PrintWriter(new FileWriter(logFile.toFile()), true);
+      }
+      catch(IOException e){
+         System.out.println("WARNING: couldn't open the log file: "+logFile);
+      }
 		while (!isInterrupted()) {
 			try {
 				sleep(1000);
@@ -50,6 +71,10 @@ public class ConsoleDisplayThread extends Thread {
 			printProgress();
 		}
 		System.out.println();
+		if(log!=null) try{
+		   log.close();
+		}
+		catch(Exception ignore){}
 	}
 	
 	/**
@@ -92,14 +117,16 @@ public class ConsoleDisplayThread extends Thread {
 		if (printUsage) {
 			usageString = String.format("    Memory estimate (free/alloc/max/total): %s", getMemoryEstimates());
 		}
+      Results fileStat=results[0];
 		String s = String.format("Elapsed time: %1$d sec    Files read: %2$d    Megabytes read: %3$.2f    " +
-								 "Unique hashes: %4$d%5$s",
+								 "Unique hashes: %4$s%5$s",
 				elapsedTime / 1000,
-				results.get("files read"),
-				((float) results.get("bytes read"))/((float) CompScan.ONE_MB),
-				hashCounter.getCount(),
+            fileStat.get("files read"),
+            ((float) fileStat.get("bytes read"))/((float) CompScan.ONE_MB),
+            String.join("/",Stream.of(hashCounters).map(hc->(String)hc.toString()).toArray(size->new String[size])),
 				usageString);
 		lastString = s;
 		System.out.print(s);
+		if(log!=null) log.println("["+df.format(new Date())+"] "+s);
 	}
 }

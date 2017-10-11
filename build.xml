@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="CompScan" default="build" basedir="."> 
+	<property name="tmpDir" value="tmp"/>
+	<property name="srcDir" value="src"/>
+	<property name="libDir" value="lib"/>
+	<property name="jniDir" value="jni"/>
+	
+    <target name="compile">
+        <mkdir dir="${tmpDir}"/>
+        <mkdir dir="${tmpDir}/classes"/>
+
+        <javac srcdir="${srcDir}" destdir="${tmpDir}/classes" 
+        	   target="1.8" encoding="UTF8" debug="on" debuglevel="source,lines">
+            <classpath id="classpath">
+                <fileset dir="lib" includes="*.jar"/>
+            </classpath>
+        </javac>
+        <copy todir="${tmpDir}/classes" overwrite="true">
+            <fileset dir="${srcDir}" excludes="**/*.java"/>
+        </copy>
+    </target>
+	
+    <target name="build" depends="compile">
+        <copy todir="${tmpDir}/classes" overwrite="true">
+            <fileset dir="${jniDir}" includes="lib/**/*compscan.*"/>
+        </copy>
+        <jar basedir="${tmpDir}/classes" destfile="CompScan.jar"
+        	manifest="${srcDir}/META-INF/MANIFEST.MF">
+            <include name="**"/>
+        </jar>
+        
+        <delete dir="${tmpDir}/classes"/>
+        <delete dir="${tmpDir}/META-INF"/>
+    </target>
+	
+</project>

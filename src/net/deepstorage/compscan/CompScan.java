@@ -9,6 +9,7 @@ package net.deepstorage.compscan;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.SimpleDateFormat;
@@ -19,73 +20,81 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import net.deepstorage.compscan.Compressor.BufferLengthException;
 import net.deepstorage.compscan.Compressor.CompressionInfo;
-import net.deepstorage.compscan.FileScanner.NoNextFileException;
+import net.deepstorage.compscan.util.*;
 
 /**
  * CompScan's main class.
  * 
- * @author Ramon A. Lovato
+ * @author Ramon A. Lovato, S.Samokhodkin
  * @version 1.0
  */
 public class CompScan {
-	// Valid file extensions.
-	public static final String[] VALID_EXTENSIONS = {
-			"txt",
-			"vhd",
-			"vhdx",
-			"vmdk"
-	};
-	// Symbolic constant representing unthrottled IO rate.
-	public static final double UNLIMITED = 0.0;
 	// Subpackage prefix for the compression package.
 	public static final String COMPRESSION_SUBPACKAGE = "compress";
 	// Symbolic constant for 1 million bytes (1 MB), the default input buffer size.
 	public static final int ONE_MB = 1_000_000;
 	
+   //Map suppliers for whole stream (big), single file (medium), single superblock (small)
+	//inject!!!
+   public static Supplier<MdMap> bigMapSupplier;
+   
+   public static final Supplier<MdMap> mediumMapSupplier=
+      new DirectMapSupplier(20,8,1<<26,1L<<30) //key size 20B, value size 8B, grow in 64M chunks, limit 1G
+   ;
+   public static final Supplier<MdMap> smallMapSupplier=
+      new JavaMapSupplier(20) //use java HashMap
+   ;
+   
+   //over this threshold use bigMapSupplier
+   private static final int bigMapSize= 256*1024*1024/120; // 256M/(max entry size)
+   //below this threshold use smallMapSupplier
+   private static final int smallMapSize=2000; //limit by load to gc
+	
+   public static Supplier<MdMap> getMapSupplier(long size){
+      if(size>=bigMapSize) return bigMapSupplier;
+      if(size<=smallMapSize) return smallMapSupplier;
+      return mediumMapSupplier;
+   }
+	
 	private final Date date;
 	
 	private boolean setupLock;
 	
-	private double ioRate;
+	private Double ioRate;
 	private Path pathIn;
 	private Path pathOut;
-	private ScanMode scanMode;
-	private int blockSize;
-	private int superblockSize;
-	private int bufferSize;
+   private ScanMode scanMode;
+   Object scanModeArg;
+   private int[] blockSizes;
+   private int superblockSize;
+   private int bufferSize;
 	private boolean overwriteOK;
 	private Compressor compressor;
 	private boolean printHashes;
-	private boolean verbose;
-	private MutableCounter hashCounter;
+   private boolean verbose;
+   private AtomicLong[] hashCounters;
 	private boolean printUsage;
-	
+   private Path logPath;
+   
 	/**
 	 * Default constructor.
 	 * 
 	 * @param args CLI arguments.
 	 */
 	private CompScan(String[] args) throws IllegalArgumentException {
-		ioRate = UNLIMITED;
-		pathIn = null;
-		pathOut = null;
 		scanMode = ScanMode.NORMAL;
-		blockSize = 0;
-		superblockSize = 0;
-		bufferSize = ONE_MB;
-		overwriteOK = false;
-		compressor = null;
-		printHashes = false;
-		verbose = false;
-		printUsage = false;
+      bufferSize = ONE_MB;
 		
-		setupLock = false;
 		date = Calendar.getInstance().getTime();
 		InputParser ip = new InputParser(this);
 		ip.parse(args);
@@ -108,9 +117,12 @@ public class CompScan {
 	 * @param printUsage Whether or not to include estimated memory usage in console output.
 	 * @throws Exception if called more than once.
 	 */
-	void setup(double ioRate, Path pathIn, Path pathOut, ScanMode scanMode, int blockSize, int superblockSize,
-			int bufferSize, boolean overwriteOK, Compressor compressor, boolean printHashes, boolean verbose,
-			boolean printUsage) {
+	void setup(
+      Double ioRate, Path pathIn, Path pathOut, ScanMode scanMode, Object scanModeArg,
+      int[] blockSizes, int superblockSize, int bufferSize, boolean overwriteOK, 
+      Compressor compressor, boolean printHashes, boolean verbose, boolean printUsage,
+      Path logPath
+	){
 		if (setupLock) {
 			System.err.println("CompScan.setup cannot be called more than once.");
 			System.exit(1);
@@ -119,134 +131,163 @@ public class CompScan {
 		this.pathIn = pathIn;
 		this.pathOut = pathOut;
 		this.scanMode = scanMode;
-		this.blockSize = blockSize;
-		this.superblockSize = superblockSize;
+      this.scanModeArg=scanModeArg;
+      this.blockSizes= blockSizes;
+      this.superblockSize=superblockSize;
 		this.bufferSize = bufferSize;
 		this.overwriteOK = overwriteOK;
 		this.compressor = compressor;
 		this.printHashes = printHashes;
 		this.verbose = verbose;
 		this.printUsage = printUsage;
+      this.logPath=logPath;
 		setupLock = true;
-	}
+		
+      if(bigMapSupplier==null) throw new IllegalStateException("missing map supplier");
+   }
 	
 	/**
 	 * Run scan.
 	 */
-	private void run() {
+	void run() {
 		System.out.format("Starting run.%n%n");
 
-		Results results = new Results(pathOut.getFileName().toString(), date);
-		results.set("block size", blockSize);
-		results.set("superblock size", superblockSize);
-		
-		hashCounter = new MutableCounter();
-		ConsoleDisplayThread cdt = new ConsoleDisplayThread(results, hashCounter, printUsage);
-
-		try {
-			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, results, hashCounter, verbose);
-			cdt.start();
-			fs.scan();
-			if (printHashes) {
-				results.printHashes();
-			}
-		} catch (IOException e) {
-			System.err.format("A filesystem IO error ocurred.%n%n");
-			e.printStackTrace();
-			System.exit(1);
-		} catch (BufferLengthException e) {
-			System.err.format("The input buffer is the wrong size.%n%n");
-			e.printStackTrace();
-			System.exit(1);
-		} catch (NoNextFileException e) {
-			System.err.println(e.getMessage());
-			System.exit(1);
-		}
-		
-		cdt.interrupt();
-		try {
-			cdt.join();
-		} catch (InterruptedException e) {
-			// Nothing to do.
-		}
-		
-		// Save results.
-		try {
-			writeResults("totals.csv", results.toString(), overwriteOK);
-			writeResults("hashes.csv", results.makeHashCounterString(), overwriteOK);
-			System.out.println(
-					String.format(
-							"%n--> Output saved in \"%s\".%n", pathOut));
-		} catch (IOException e) {
-			System.err.println("Unable to save output.");
-			e.printStackTrace();
-		} finally {
-			System.out.println(results.toString());
-		}
-	}
+      Results results[] = new Results[blockSizes.length];
+      for(int i=0;i<results.length;i++){
+         Results r=results[i]=
+            new Results(pathOut.getFileName().toString(), date, bigMapSupplier)
+         ;
+         r.set("block size", blockSizes[i]);
+         r.set("superblock size", superblockSize);
+      }
+      hashCounters=new AtomicLong[blockSizes.length];
+      for(int i=0;i<hashCounters.length;i++) hashCounters[i]=new AtomicLong();
+      ConsoleDisplayThread cdt = new ConsoleDisplayThread(results, hashCounters, printUsage, logPath);
+      try{
+         try{
+   			FileScanner fs = new FileScanner(
+               pathIn, blockSizes, superblockSize, bufferSize, results, hashCounters, compressor, 
+               ioRate, verbose
+   		   );
+            cdt.start();
+            fs.scanCombined();
+            if(printHashes) printHashes(results);
+   		}
+   		catch (IOException e) {
+   			System.err.format("A filesystem IO error ocurred.%n%n");
+   			e.printStackTrace();
+   			System.exit(1);
+   		}
+   		catch (BufferLengthException e) {
+   			System.err.format("The input buffer is the wrong size.%n%n");
+   			e.printStackTrace();
+   			System.exit(1);
+   		}
+   		cdt.interrupt();
+   		try{
+   			cdt.join();
+   		}
+   		catch (InterruptedException e) {}
+      		
+   		try{
+   		   //hashes
+            for(int i=0;i<blockSizes.length;i++){
+               writeResults("hashes_"+blockSizes[i]+".csv", results[i].makeHashCounterString(), overwriteOK);
+               writeResults("totals_"+blockSizes[i]+".csv", results[i].toString(), overwriteOK);
+            }
+            //compression
+            System.out.println(String.format("%n--> Output saved in \"%s\".%n", pathOut));
+         }
+   		catch (IOException e) {
+   			System.err.println("Unable to save output.");
+   			e.printStackTrace();
+   		}
+   		finally{
+            for(Results r:results) System.out.println(r.toString());
+   		}
+	   }
+      finally{
+         for(Results r:results) r.releaseHashes();
+         Executor.shutdown();
+      }
+   }
 	
 	/**
 	 * Run VMDK-mode scan.
 	 */
-	private void runVMDKMode() {
+	void runFiles(Predicate<Path> fileFilter) {
 		System.out.format("Starting run.%n%n");
 		
-		Results totals = new Results(pathOut.getFileName().toString(), date);
-		totals.set("block size", blockSize);
-		totals.set("superblock size", superblockSize);
-		
-		List<Results> allResults = new LinkedList<>();
-		
-		hashCounter = new MutableCounter();
-		ConsoleDisplayThread cdt = new ConsoleDisplayThread(totals, hashCounter, printUsage);
-		
-		try {
-			FileScanner fs = new FileScanner(pathIn, blockSize, bufferSize, ioRate, compressor, totals, hashCounter, verbose);
-			cdt.start();
-			fs.scanVMDKMode(allResults, this, printHashes);
-		} catch (IOException e) {
-			System.err.format("A filesystem IO error ocurred.%n%n");
-			e.printStackTrace();
-			System.exit(1);
-		} catch (BufferLengthException e) {
-			System.err.format("The input buffer is the wrong size.%n%n");
-			e.printStackTrace();
-			System.exit(1);
-		} catch (NoNextFileException e) {
-			System.err.println(e.getMessage());
-			System.exit(1);
-		}
-		
-		cdt.interrupt();
-		try {
-			cdt.join();
-		} catch (InterruptedException e) {
-			// Nothing to do.
-		}
-		
-		// Save results.
-		String resultString = makeVMDKResultString(allResults, totals);
-		try {
-			writeResults("totals.csv", resultString, overwriteOK);
-			System.out.println(
-					String.format(
-							"%n--> Output saved in \"%s\".%n", pathOut));
-			// Hash results are saved incrementally in VMDK mode, so don't need to do anything here.
-		} catch (IOException e) {
-			System.err.println("Unable to save output.");
-			e.printStackTrace();
-		} finally {
-			System.out.println(resultString);
-		}
+      Results[] totals = new Results[blockSizes.length];
+      for(int i=0;i<totals.length;i++){
+         totals[i]=new Results(
+            pathOut.getFileName().toString(), date, bigMapSupplier
+         );
+         totals[i].set("block size", blockSizes[i]);
+         totals[i].set("superblock size", superblockSize);
+      }
+      hashCounters=new AtomicLong[blockSizes.length];
+      for(int i=0;i<hashCounters.length;i++) hashCounters[i]=new AtomicLong();
+      List<Results[]> allResults = new LinkedList<>();
+      ConsoleDisplayThread cdt = new ConsoleDisplayThread(totals, hashCounters, printUsage, logPath);
+      try{
+   		try{
+   			FileScanner fs = new FileScanner(
+               pathIn, blockSizes, superblockSize, bufferSize, totals, hashCounters,
+               compressor, ioRate, verbose
+   			);
+            cdt.start();
+            fs.scanSeparately(allResults, this, fileFilter, printHashes);
+   		}
+   		catch (IOException e) {
+   			System.err.format("A filesystem IO error ocurred.%n%n");
+   			e.printStackTrace();
+   			System.exit(1);
+   		}
+   		catch (BufferLengthException e) {
+   			System.err.format("The input buffer is the wrong size.%n%n");
+   			e.printStackTrace();
+   			System.exit(1);
+   		}
+   		cdt.interrupt();
+   		try{
+   			cdt.join();
+   		} catch (InterruptedException e) {
+   			// Nothing to do.
+   		}
+   		
+   		try {
+            // Hash results are saved incrementally in VMDK mode, so don't need to do anything here.
+            // now save compression results
+            for(int i=0;i<blockSizes.length;i++){
+               final int ind=i;
+               String resultString=makeFileResultString(
+                  allResults.stream().map(results->results[ind]).collect(Collectors.toList()),
+                  totals[i]
+               );
+               writeResults("totals_"+blockSizes[i]+".csv", resultString, overwriteOK);
+               System.out.println(resultString);
+            }
+            System.out.println(String.format("%n--> Output saved in \"%s\".%n", pathOut));
+   		}
+   		catch (IOException e) {
+   			System.err.println("Unable to save output.");
+   			e.printStackTrace();
+   		}
+      }
+      finally{
+         for(Results r:totals) r.releaseHashes();
+         Executor.shutdown();
+      }
 	}
-	
+   
 	/**
 	 * Convert VMDK scan results into a string for saving to the output CSV.
 	 * 
 	 * @param allResults List of Results objects containing the intermediate results.
 	 * @param totals Results object containing the aggregate results.
 	 */
-	public String makeVMDKResultString(List<Results> allResults, Results totals) {
+	public String makeFileResultString(List<Results> allResults, Results totals) {
 		List<String> lines = new LinkedList<>();
 		lines.add(totals.makeHeadingString());
 		lines.addAll(
@@ -259,7 +300,14 @@ public class CompScan {
 		
 		return String.join(System.lineSeparator(), lines);
 	}
-	
+   
+   public void printHashes(Results[] results)throws IOException{
+      for(int i=0;i<results.length;i++){
+         System.out.println("Hashes for block size "+blockSizes[i]+":");
+         results[i].printHashes();
+      }
+   }
+   
 	/**
 	 * Save the results to a CSV file.
 	 * 
@@ -268,8 +316,11 @@ public class CompScan {
 	 * @return The actual path where the file was saved. Might not be the same as pathOut if pathOut already exists.
 	 * @throws IOException if an IO error occurred.
 	 */
-	public String writeResults(String name, String resultString, boolean overwriteOK) throws IOException {
-		Path writePath = pathOut.resolve(name);
+   public String writeResults(String name, String resultString) throws IOException {
+      return writeResults(name, resultString, overwriteOK);
+   }
+   public String writeResults(String name, String resultString, boolean overwriteOK) throws IOException {
+      Path writePath = pathOut.resolve(name);
 		if (Files.exists(writePath) && !overwriteOK) {
 			int i = 0;
 			String[] partials = name.split("\\.(?=\\w+$)");
@@ -301,13 +352,25 @@ public class CompScan {
 	public String writeHashResults(Results r, Path p) throws IOException {
 		return writeResults(p.getFileName() + ".hash.csv", r.makeHashCounterString(), overwriteOK);
 	}
-	
+   
+   public void writeHashResults(Results[] results, Path path) throws IOException{
+      final String fs=path.getFileSystem().getSeparator();
+      for(int i=0;i<results.length;i++){
+         Results r=results[i];
+         String fileName=
+            //path.toString().replace(fs,"_")+"_"+r.get("block size")+".hash.csv"
+            path.toString().replace(fs,"_")+"_"+blockSizes[i]+".hash.csv"
+         ;
+         writeResults(fileName, r.makeHashCounterString(), overwriteOK);
+      }
+   }
+   
 	/**
 	 * Getter for ioRate.
 	 * 
 	 * @return The IOPS limit (0 = UNLIMITED).
 	 */
-	public double getIORate() {
+	public Double getIORate() {
 		return ioRate;
 	}
 	
@@ -318,30 +381,86 @@ public class CompScan {
 	 */
 	public static void printHelp(String custom) {
 		System.out.format(
-				"Usage: CompScan [-h] [--help] [--vmdk] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]%n"
-			    + "                pathIn pathOut blockSize superblockSize format%n"
+            "Usage: CompScan [-h] [--help] [--mode (NORMAL|BIG <size>|VMDK)]"
+            + " [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE]"
+            + " [--mapType (java|direct|fs[:<path>])] [--mapDataSizeMax <size>]"
+            + " [--mapDataChunk <size>] [--mapListSize <number>] [--threads <number>]"
+            + " pathIn pathOut blockSize superblockSize format[:<options>]%n"
 				+ "Positional Arguments%n"
-			    + "         pathIn            path to the dataset%n"
+			   + "         pathIn            path to the dataset%n"
 				+ "         pathOut           where to save the output%n"
-				+ "         blockSize         bytes per block%n"
-			    + "         superblockSize    bytes per superblock%n"
-				+ "         formatString      compression format to use%n"
-			    + "Optional Arguments%n"
+            + "         blockSize         bytes per block; scanning with multiple block sizes%n"
+            + "                           is supported. Format: one or more integer values%n"
+            + "                           separated by commas without spaces;%n"
+            + "                           each value may have scale suffix (k for KiB, etc)%n"
+            + "                           example: \"512,1k,2k\"%n"
+            + "         superblockSize    bytes per superblock%n"
+            + "         format            compression format to use, currently%n"
+            + "                           includes None,LZ4,GZIP,LZW;%n"
+            + "         format options    for LZ4: compression level, number 0 - 17, default 9%n"
+            + "                           for GZIP: compression level, number 1 - 9, default 6%n"
+      + "Optional Arguments%n"
 				+ "         -h, --help        print this help message%n"
-			    + "         --verbose         enable verbose console feedback (should only be used for debugging)%n"
-				+ "         --usage           enable printing of estimated memory usage (requires wide console)%n"
-			    + "         --vmdk            whether to report individual virtual disks separately%n"
-			    + "         --overwrite       whether overwriting the output file is allowed%n"
-				+ "         --rate MB_PER_SEC maximum MB/sec we're allowed to read%n"
-			    + "         --buffer-size BUFFER_SIZE size of the internal read buffer%n"
-				+ "         --hashes          print the hash table before exiting; the hashes are never saved to disk%n"
-			    );
+			   + "         --verbose         enable verbose console feedback (should only be used for debugging)%n"
+ 				+ "         --usage           enable printing of estimated memory usage (requires wide console)%n"
+            + "         --mode            scan mode, one of "+Arrays.asList(ScanMode.values())+":%n"
+            + "                           * NORMAL - default, all file tree is processed as single stream%n"
+            + "                           * BIG <size spec> - process files independently, only those%n"
+            + "                             bigger then spec, where <size spec> = <number>[k|m|g]%n"
+            + "                             meaning size in bytes, e.g: 1000, 100k, 100m, 100g%n"
+            + "                           * VMDK - process files independently, only those%n"
+            + "                             with extensions "+ScanMode.VMDK_EXTENSIONS+"%n"
+            + "         --overwrite       whether overwriting the output file is allowed%n"
+            + "         --report <file>   print progress info to the file%n"
+            + "         --rate MB_PER_SEC maximum MB/sec we're allowed to read%n"
+			   + "         --buffer-size BUFFER_SIZE size of the internal read buffer%n"
+            + "         --hashes          print the hash table before exiting; the hashes are never saved to disk%n"
+            + "         --threads         number of processing threads.%n"
+            + "                           Optimal value: number of CPU cores/hyperthreads.%n"
+            + "                           Default: autodetected%n"
+            + "         --pause           make pause (e.g. to attach external profiler)%n"
+            + "         --mapType         select the implementation of the hash-counting map:%n"
+            + "                           * java - plain java.util.HashMap%n"
+            + "                           * direct - custom off-heap map over native RAM%n"
+            + "                           * fs - custom off-heap map over memory-mapped files%n"
+            + "                           Default: fs:<user home>/.compscan/map%n"
+            + "         --mapDir          home directory for fs-type map%n"
+            + "         --mapOptions      print advanced map options and exit%n"
+      );
 		// Short-circuits.
 		if (custom != null && custom.length() > 0) {
 			System.out.format("%n" + custom + "%n");
 		}
 	}
 	
+	static void printMapOptions(){
+      System.out.format(
+            "Advanced map options:"
+            + "         --mapMemoryMax    upper expected limit for map memory size.%n"
+            + "                           Holds only for direct and fs maps. Upon reaching%n"
+            + "                           this limit the maps will stop working.%n"
+            + "                           Estimation: <expected scan size>*100/<block size>%n"
+            + "                           Default: 128TiB%n"
+            + "         --mapMemoryChunk  map memory allocation chunks.%n"
+            + "                           Holds only for direct and fs maps.%n"
+            + "                           Too small chunks may cause speed degradation.%n"
+            + "                           Too large chunks may cause allocation problems.%n"
+            + "                           Optimal value:%n"
+            + "                           <expected map memory size (see above)>/1000%n"
+            + "                           Default: 128MiB%n"
+            + "         --mapListSize     map's internal parameter, controls the tradeoff%n"
+            + "                           between speed and memory consumtion%n"
+            + "                           Speed ~ 1/L%n"
+            + "                           Capacity (entries) = M/L, where%n"
+            + "                             M = system RAM size, bytes%n"
+            + "                             L ~= 30+900/mapListSize, bytes%n"
+            + "                           Optimal ranges:%n"
+            + "                           - 8..20 for faster procesing%n"
+            + "                           - 40..60 for higher capacity%n"
+            + "                           Default: 50 (optimized for capacity)%n"
+      );
+	}
+   
 	/**
 	 * Convenience overload for printHelp.
 	 */
@@ -354,35 +473,36 @@ public class CompScan {
 	 * 
 	 * @param args CLI arguments.
 	 */
-	public static void main(String[] args) {
-		CompScan cs = null;
-		try {
+	public static void main(String[] args) throws Exception{
+//if(args.length==0){
+//   String testdata= new File("testdata").exists()? "testdata": "../testdata";
+//   //args=new String[]{testdata+"/in/all",testdata+"/out","1000,1500,2000","10000","None"};
+//   args=new String[]{
+//      //"--hashes","--overwrite",
+//      //"--mode", "BIG", "50k",
+////      testdata+"/in/small",testdata+"/out","1000,1500,2000","10000","LZ4:0"
+////      "--buffer-size","5",
+//      testdata+"/in/tiny",testdata+"/out","1000","10000","None"
+//   };
+//}
+      CompScan cs = null;
+		try{
 			cs = new CompScan(args);
-		} catch (IllegalArgumentException ex) {
+		}
+		catch (IllegalArgumentException ex) {
 			printHelp(ex.getMessage());
 		}
 		if (cs == null) {
 			System.exit(1);
 		}
-		
-		if (cs.scanMode == ScanMode.VMDK) {
-			cs.runVMDKMode();
-		} else {
-			cs.run();
-		}
+      
+      cs.scanMode.run(cs);
 	}
 	
-	/**
-	 * Nested enumeration for tracking the scan mode.
-	 */
-	public static enum ScanMode {
-		NORMAL, VMDK;
-	}
-	
-	/**
+ /**
 	 * A simple inner class for keeping track of the current hash count.
 	 */
-	public class MutableCounter {
+	public class MutableCounter{
 		private long c;
 		
 		public MutableCounter() {
@@ -424,7 +544,9 @@ public class CompScan {
 		private final String name;
 		private final String timestamp;
 		private Map<String, Long> map;
-		private Map<String, Long> hashes;
+      
+      //private Map<Object, Long> hashes;
+      private MdMap hashes;
 		
 		/**
 		 * Convenience constructor for creating a new Results object from a name
@@ -433,8 +555,8 @@ public class CompScan {
 		 * @param name Name to assign to the resulting data set.
 		 * @param date Date object from which to generate the timestamp.
 		 */
-		public Results(String name, Date date) {
-			this(name, new SimpleDateFormat("MM/dd/yyyy KK:mm:ss a Z").format(date));			
+		public Results(String name, Date date, Supplier<MdMap> regSup) {
+         this(name, new SimpleDateFormat("MM/dd/yyyy KK:mm:ss a Z").format(date),regSup);
 		}
 		
 		/**
@@ -443,7 +565,7 @@ public class CompScan {
 		 * @param name Name to assign to the resulting data set.
 		 * @param timestamp Formatted timestamp string to use.
 		 */
-		public Results(String name, String timestamp) {
+      public Results(String name, String timestamp, Supplier<MdMap> regSup) {
 			this.name = name;
 			this.timestamp = timestamp;
 			// Uses a LinkedHashMap to preserve insertion order.
@@ -451,7 +573,7 @@ public class CompScan {
 			for (String s : KEYS) {
 				map.put(s, 0L);
 			}
-			hashes = new HashMap<>();
+         hashes = regSup.get();
 		}
 		
 		/**
@@ -460,8 +582,9 @@ public class CompScan {
 		 * @param k Map key to update.
 		 * @param v Value to assign to the key.
 		 */
-		public void set(String k, long v) {
-			if (!map.containsKey(k)) {
+      public synchronized void set(String k, long v) {
+//public void set(String k, long v) {
+         if (!map.containsKey(k)) {
 				throw new IllegalArgumentException("Invalid key \"" + k + "\".");
 			}
 			map.put(k, v);
@@ -473,8 +596,9 @@ public class CompScan {
 		 * @param k Map key to retrieve.
 		 * @return Value assigned to the key.
 		 */
-		public long get(String k) {
-			if (!map.containsKey(k)) {
+      public synchronized long get(String k) {
+//public long get(String k) {
+         if (!map.containsKey(k)) {
 				throw new IllegalArgumentException("Invalid key \"" + k + "\".");
 			}
 			return map.get(k);
@@ -496,34 +620,43 @@ public class CompScan {
 		 * @param hash Sha-1 hash to update.
 		 * @param count Number to add to the hash counter.
 		 */
-		public void updateHash(String hash, long count) {
-			if (!hashes.containsKey(hash)) {
-				hashes.put(hash, count);
-			} else {
-				hashes.put(hash, hashes.get(hash) + count);
-			}
-		}
-		
-		/**
+      public synchronized void updateHash(byte[] hash, long count) {
+//public void updateHash(Object hash, long count) {
+         hashes.add(hash,0,count);
+      }
+      
+      public synchronized void updateHashes(List<byte[]> list){
+//public void updateHash(Object hash, long count) {
+         for(int i=list.size(); i-->0;) hashes.add(list.get(i),0,1);
+      }
+      
+  /**
 		 * Run updateHash on all entries in the specified map.
 		 * 
 		 * @param h Map<String, Long> containing counters for hash occurrences.
 		 */
-		public void updateHashes(Map<String, Long> h) {
-			if (h == null) {
-				return;
-			}
-			for (Map.Entry<String, Long> e : h.entrySet()) {
-				updateHash(e.getKey(), e.getValue());
-			}
+      public synchronized void updateHashes(MdMap h){
+//public void updateHashes(Map<Object, Long> h) {
+         if(h == null) return;
+			h.scan(new MdMap.Consumer(){
+            public void consume(byte[] md, int off, long count){
+               hashes.add(md,off,count);
+            }
+         });
 		}
-		
+      
+      public synchronized void updateHashes(Map<MD,Long> h){
+         if(h==null) return;
+         for(Map.Entry<MD,Long> e: h.entrySet()){
+            MD md=e.getKey();
+            hashes.add(md.data, md.off, e.getValue());
+         }
+      }
 		/**
 		 * Allows releasing resources for the hash counters.
 		 */
-		public void releaseHashes() {
-			hashes.clear();
-			System.gc();
+      public void releaseHashes(){
+         hashes.dispose();
 		}
 		
 		/**
@@ -531,15 +664,14 @@ public class CompScan {
 		 * 
 		 * @param ci CompressionInfo whose data should be added to the results.
 		 */
-		public void feedCompressionInfo(CompressionInfo ci) {
-			addTo("bytes read", ci.bytesRead);
+      public synchronized void feedCompressionInfo(CompressionInfo ci) {
+//public void feedCompressionInfo(CompressionInfo ci) {
+         addTo("bytes read", ci.bytesRead);
 			addTo("blocks read", ci.blocksRead);
 			addTo("superblocks read", ci.superblocksRead);
 			addTo("compressed bytes", ci.compressedBytes);
 			addTo("compressed blocks", ci.compressedBlocks);
 			addTo("actual bytes needed", ci.actualBytes);
-			Map<String, Long> ciHashes = ci.getHashes();
-			updateHashes(ciHashes);
 		}
 		
 		/**
@@ -547,8 +679,9 @@ public class CompScan {
 		 * 
 		 * @param r Results object from which to update.
 		 */
-		public void feedOtherResults(Results r) {
-			feedOtherResults(r, r.hashes);
+      public synchronized void feedOtherResults(Results r, boolean hashes){
+//public void feedOtherResults(Results r) {
+         feedOtherResults(r, hashes? r.hashes: null);
 		}
 		
 		/**
@@ -557,8 +690,9 @@ public class CompScan {
 		 * @param r Results object from which to update.
 		 * @param h Hashes map from which to update hashes.
 		 */
-		public void feedOtherResults(Results r, Map<String, Long> h) {
-			addTo("files read", r.get("files read"));
+      private void feedOtherResults(Results r, MdMap h){
+//public void feedOtherResults(Results r, Map<Object, Long> h) {
+         addTo("files read", r.get("files read"));
 			addTo("bytes read", r.get("bytes read"));
 			addTo("blocks read", r.get("blocks read"));
 			addTo("superblocks read", r.get("superblocks read"));
@@ -573,8 +707,9 @@ public class CompScan {
 		/**
 		 * Increment the files read counter.
 		 */
-		public void incrementFilesRead() {
-			set("files read", get("files read") + 1);
+      public synchronized void incrementFilesRead() {
+//public void incrementFilesRead() {
+         set("files read", get("files read") + 1);
 		}
 		
 		/**
@@ -582,8 +717,9 @@ public class CompScan {
 		 * 
 		 * @return Compressed bytes / bytes read.
 		 */
-		public double getRawCompressionFactor() {
-			long bytesRead = map.get("bytes read");
+      public synchronized double getRawCompressionFactor() {
+//public synchronized double getRawCompressionFactor() {
+         long bytesRead = map.get("bytes read");
 			if (bytesRead == 0) {
 				return 0.0;
 			}
@@ -595,8 +731,9 @@ public class CompScan {
 		 * 
 		 * @return Actual bytes needed / bytes read.
 		 */
-		public double getSuperblockCompressionFactor() {
-			long bytesRead = map.get("bytes read");
+      public synchronized double getSuperblockCompressionFactor() {
+//public double getSuperblockCompressionFactor() {
+         long bytesRead = map.get("bytes read");
 			if (bytesRead == 0) {
 				return 0.0;
 			}
@@ -608,8 +745,9 @@ public class CompScan {
 		 * 
 		 * @return A CSV-formatted heading string from the map keys.
 		 */
-		public String makeHeadingString() {
-			List<String> headings = new LinkedList<>(map.keySet());
+      public synchronized String makeHeadingString() {
+//public String makeHeadingString() {
+         List<String> headings = new LinkedList<>(map.keySet());
 			headings.add(0, "name");
 			headings.add(1, "timestamp");
 			headings.add("raw compression factor");
@@ -622,8 +760,9 @@ public class CompScan {
 		 * 
 		 * @return A CSV-formatted value string from the map values.
 		 */
-		public String makeValueString() {
-			List<String> values = new LinkedList<>(
+      public synchronized String makeValueString() {
+//public String makeValueString() {
+         List<String> values = new LinkedList<>(
 					map.values()
 					.stream()
 					.map(v -> String.valueOf(v))
@@ -640,8 +779,8 @@ public class CompScan {
 		 * 
 		 * @return A CSV-formatted string for the hash counters.
 		 */
-		public String makeHashCounterString() {			
-			Map<Long, Long> counters = getHashCounters();
+      public synchronized String makeHashCounterString() {        
+         Map<Long, Long> counters = getHashCounters();
 			
 			List<String> lines = new LinkedList<String>();
 			
@@ -662,22 +801,23 @@ public class CompScan {
 		 * @return Map<Long, Long> in which the key represents the number of repeats and the value
 		 * 		   represents the number of blocks that repeat that number of times.
 		 */
-		public Map<Long, Long> getHashCounters() {
-			Map<Long, Long> counters = new TreeMap<Long, Long>();
-			
-			for (Iterator<Map.Entry<String, Long>> it = hashes.entrySet().iterator(); it.hasNext(); ) {
-				Map.Entry<String, Long> current = it.next();
-				long key = current.getValue();
-				long value = (counters.containsKey(key) ? counters.get(key) + 1L : 1L);
-				
-				counters.put(key, value);
-			}
-			
-			return counters;
+      public synchronized Map<Long, Long> getHashCounters() {
+//public Map<Long, Long> getHashCounters() {
+         Map<Long, Long> counters = new TreeMap<Long, Long>();
+         hashes.scan(new MdMap.Consumer(){
+			   public void consume(byte[] md, int off, long count){
+               Long n=counters.get(count);
+               counters.put(count, n==null? 1L: n+1L);
+            }
+			});
+//System.out.println("CS.Results.getHashCounters():");
+//System.out.println(" hashes: "+hashes.size());
+//System.out.println(" counters: "+counters);
+         return counters;
 		}
 		
 		@Override
-		public String toString() {			
+      public synchronized String toString() {         
 			return makeHeadingString() + System.lineSeparator() + makeValueString();
 		}
 		
@@ -687,7 +827,7 @@ public class CompScan {
 		 * @param k Map key to add to.
 		 * @param v Value to add to the map value for k.
 		 */
-		private void addTo(String k, long v) {
+      private void addTo(String k, long v) {
 			map.put(k, map.get(k) + v);
 		}
 
@@ -705,7 +845,7 @@ public class CompScan {
 		 * 
 		 * @return The hash counters map.
 		 */
-		public Map<String, Long> getHashes() {
+      public MdMap getHashes() {
 			return hashes;
 		}
 		
@@ -714,12 +854,17 @@ public class CompScan {
 		 * 
 		 * @return Formatted string of the hash counters map.
 		 */
-		public String makeHashString() {
-			return String.join(System.lineSeparator(),
-					hashes.entrySet()
-					.stream()
-					.map(x -> String.format("%1$s -> %2$d", x.getKey(), x.getValue()))
-					.collect(Collectors.toList()));
+		public synchronized String makeHashString(){
+         StringBuilder sb=new StringBuilder();
+		   hashes.scan(new MdMap.Consumer(){
+            public void consume(byte[] md, int off, long count){
+               sb.append(Util.toHexString(md,off,hashes.keyLength()));
+               sb.append(" -> ");
+               sb.append(count);
+               sb.append("\n");
+            }
+		   });
+		   return sb.toString();
 		}
 		
 		/**

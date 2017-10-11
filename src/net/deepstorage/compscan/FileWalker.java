@@ -10,13 +10,13 @@ package net.deepstorage.compscan;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
+import java.nio.file.Paths;
+import java.nio.file.FileSystems;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
-
-import net.deepstorage.compscan.CompScan.ScanMode;
 
 /**
  * A filesystem walker for CompScan.
@@ -40,7 +40,7 @@ public class FileWalker implements AutoCloseable {
 	 * @throws IOException if the file stream couldn't be opened.
 	 */
 	public FileWalker(Path root, boolean verbose) throws IOException {
-		this(root, ScanMode.NORMAL, verbose);
+      this(root, f -> Files.isRegularFile(f), verbose);
 	}
 	
 	/**
@@ -53,16 +53,11 @@ public class FileWalker implements AutoCloseable {
 	 * @param verbose Whether or not to enable verbose console logging.
 	 * @throws IOException if the file stream couldn't be opened.
 	 */
-	public FileWalker(Path root, ScanMode scanMode, boolean verbose) throws IOException {
+	public FileWalker(Path root, Predicate<Path> filter, boolean verbose) throws IOException {
 		this.root = root;
 		this.verbose = verbose;
 		
-		if (scanMode == ScanMode.VMDK) {
-			fileStream = Files.walk(this.root).filter(f -> isVMDK(f));
-		} else {
-			fileStream = Files.walk(this.root).filter(f -> Files.isRegularFile(f));
-		}
-		
+      fileStream = Files.walk(this.root).filter(filter);
 		iterator = fileStream.iterator();
 		pending = new LinkedList<Path>();
 		filesAccessed = 0;
@@ -151,24 +146,12 @@ public class FileWalker implements AutoCloseable {
 		fileStream.close();
 	}
 	
-	/**
-	 * Check if path is a valid virtual disk file.
-	 * 
-	 * @param path Path to verify.
-	 * @return True if path is a valid virtual disk file.
-	 */
-	private static Boolean isVMDK(Path path) {
-		if (path == null) {
-			return false;
-		} else {
-			String[] partials = path.getFileName().toString().split("\\.(?=\\w+$)");
-			if (partials.length < 2) {
-				return false;
-			}
-			// Short-circuits.
-			return (Files.isRegularFile(path)
-					&& partials.length == 2
-					&& Arrays.asList(CompScan.VALID_EXTENSIONS).contains(partials[1].toLowerCase()));
-		}
+	public static void main(String[] args) throws Exception{
+      Path path= args.length==0?
+         FileSystems.getDefault().getRootDirectories().iterator().next():
+         Paths.get(args[0])
+      ;
+      FileWalker fw=new FileWalker(path, f->Files.isRegularFile(f), false);
+      while(fw.hasNext()) System.out.println(fw.next());
 	}
 }

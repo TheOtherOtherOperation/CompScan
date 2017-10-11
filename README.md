@@ -2,52 +2,135 @@
 
 CompScan is a tool for analyzing the compressibility of a datastore.
 
-A typical use might look like this:
-    java CompScan C:\inputDir C:\output.csv 4096 16384 LZW
-Alternately, if running from a JAR:
-	java -jar CompScan.jar C:\inputDir C:\output.csv 4096 16384 LZW
+A typical looks like this:
+    
+    java -cp <classpath> net.deepstorage.compscan.CompScan <arguments>
 
-Here:
-    datastore location: C:\inputDir
-    output location: C:\output.csv
-    block size: 4096
-    superblock size: 16384
-    compression scheme: LZW
+where <classpath> consists of paths to lz4.jar and CompScan.jar and separated by system-specific separator
+
+Alternately, if running from a JAR:
+   
+   java -cp <path to lz4.jar> -jar CompScan.jar <arguments>
+
+The <arguments> part is described below.
+The lz4.jar can be found in the 'lib' directory.
+
+#Examples.
+```
+Windows:
+D:\CompScan>java -cp lib/lz4-1.3.jar;CompScan.jar net.deepstorage.compscan.CompScan --mode BIG 1200m C:\inputDir C:\outputDir 4096 16384 LZ4
+D:\CompScan>java -cp lib/lz4-1.3.jar -jar CompScan.jar --mode BIG 1200m C:\inputDir C:\outputDir 4096 16384 LZ4
+
+Linux:
+~/CompScan>java -cp lib/lz4-1.3.jar:CompScan.jar net.deepstorage.compscan.CompScan --mode BIG 1200m /etc/inputDir /etc/outputDir 4096 16384 LZ4
+~/CompScan>java -cp lib/lz4-1.3.jar.jar -jar CompScan.jar --mode BIG 1200m /etc/inputDir /etc/outputDir 4096 16384 LZ4
+```
+   
+Meaning:
+datastore location: C:\inputDir
+output location: C:\outputDir
+block size: 4096
+superblock size: 16384
+compression scheme: LZ4
+mode: separate files bigger than 1200 megabytes
 
 ## Arguments
 ```
-Usage: CompScan [-h] [--help] [--vmdk] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE] pathIn pathOut blockSize superblockSize format
+Usage: CompScan [-h] [--help] [--pause] [--threads <number>] [--mapType (java|direct|fs)] [--mapDir <path>] [--mapOptions] [--mode (NORMAL|BIG <size>|VMDK)] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE] pathIn pathOut blockSize superblockSize format[:<options>]
 Positional Arguments
     pathIn            path to the dataset
     pathOut           where to save the output
-    blockSize         bytes per block
-    superblockSize    bytes per superblock (must be an even multiple of block size)
-    formatString      compression format to use
+    blockSize         bytes per block; scanning with multiple block sizes 
+                      is supported. Format: one or more integer values
+                      separated by commas without spaces;
+                      each value may have scale suffix (k for KiB, etc)
+                      example: "512,1k,2k"
+    superblockSize    bytes per superblock (compression size unit)
+    formatString      compression format to use, 
+                      currently includes None,LZ4,GZIP,LZW
+    format options    for LZ4: compression level 0 - 17, default 9
+                      for GZIP: compression level 1 - 9, default 6
 Optional Arguments
-    -h, --help        print this help message
-	--verbose         enable verbose console feedback (should only be used for debugging)
-	--usage           enable printing of estimated memory usage (requires wide console)
-    --vmdk            whether to report individual virtual disks separately
-    --overwrite       whether overwriting the output file is allowed
-    --rate MB_PER_SEC maximum MB/sec we're allowed to read
-    --buffer-size BUFFER_SIZE size of the internal read buffer, will be rounded up to the next even multiple of the superblock size
-    --hashes          print the hash table before exiting; the hashes are never saved to disk
+   -h, --help        print this help message
+   --verbose         enable verbose console feedback (should only be used for debugging)
+   --usage           enable printing of estimated memory usage (requires wide console)
+   --mode            scan mode, one of [NORMAL, BIG, VMDK]:
+                     * NORMAL - default, all file tree is processed as a single stream
+                     * BIG <size spec> - process files independently, only those
+                       bigger then spec, where <size spec> = <number>[k|m|g]
+                       meaning size in bytes, e.g: 1000, 100k, 100m, 100g
+                     * VMDK - process files independently, only those
+                       with extensions [txt, vhd, vhdx, vmdk]
+   --overwrite       whether overwriting the output file is allowed
+   --rate MB_PER_SEC maximum MB/sec we're allowed to read
+   --buffer-size BUFFER_SIZE size of the internal read buffer
+   --hashes          print the hash table before exiting; the hashes are never saved to disk
+   --threads         number of processing threads.
+                     Optimal value: number of CPU cores/hyperthreads.
+                     Default: autodetected
+   --pause           make pause (e.g. to attach external profiler)
+   --mapType         select the implementation of the hash-counting map:
+                           * java - plain java.util.HashMap
+                           * direct - custom off-heap map over native RAM
+                           * fs - custom off-heap map over memory-mapped files
+                           Default: fs:<user home>/.compscan/map
+   --mapDir          home directory for fs-type map
+   --mapOptions      print advanced map options and exit
+
+Advanced map options:
+   --mapMemoryMax    upper bound for map data size. Holds only for direct and fs maps. 
+                     Upon reaching this limit the maps will stop working.
+                     Estimation: <expected scan size>*100/<block size>
+                     Default: 128TiB
+   --mapMemoryChunk  map memory allocation chunks. Holds only for direct and fs maps.
+                     Too small chunks may cause speed degradation. Too large chunks may cause allocation problems.
+                     Optimal value:
+                     <expected map memory size (see above)>/1000
+                     Default: 128MiB
+   --mapListSize     map's internal parameter, controls the tradeoff between speed and memory consumtion
+                     Speed ~ 1/L%n"
+                     Capacity (entries) = M/L, where%n"
+                        M = system RAM size, bytes%n"
+                        L ~= 30+900/mapListSize, bytes%n"
+                     Optimal ranges:%n"
+                        8..20 for faster procesing%n"
+                        40..60 for higher capacity%n"
+                     Default: 50 (optimized for capacity)%n"
 ```
+
+
 
 ## Memory Considerations
 
-The program stores approximately 100 bytes of data per unique hash, in addition to some comparatively small amount (< 20MB) of internal state. If run on a large data store, it is very possible for the hash map to overrun the default heap memory (around 250MB in 32-bit Java). To increase the size of the heap, the following command line flags can be passed to the JVM:
-	-d64         Enable 64-bit mode (only if available)
-	-XmsVALUE    Set the minimum heap size to VALUE
-	-XmxVALUE    Set the maximum heap size to VALUE
-VALUE must be of the form NU, where N is an integer and U is a unit specifier: k (kilobytes), m (megabytes), g (gigabytes).
+The program stores approximately 100 bytes of data per unique hash, in addition to some comparatively  small amount (< 20MB) of internal state. If run on a large data store, it is very possible for the hash map to overrun the default heap memory (around 250MB in 32-bit Java). Besides that, too many objects in java heap space make garbage collection much harder, causing significant performance degradation. 
+To avoid such problems the new type of map implementation was introduced, which keeps data out of java heap, in native memory, which in turn may be either plain RAM of memory-mapped files.
+
+To switch between the map implementations use the --mapType option with following values:  
+```
+ --mapType java     - standard java HashMap. Retained as a reference.  
+ --mapType direct   - off-heap map over plain RAM.   
+ --mapType fs       - off-heap map over memory-mapped files. The default type.  
+```
+
+The fs-type map is operated over multiple temp files created in its home directory. The default directory is <user home>/.compscan/map and can be specified with --mapDir option. The files are normally deleted on application exit, but may be left undeleted upon abnormal termination, so it is recommended to periodically clean this directory.
+
+Both off-heap map types have upper size limit 128TiB, which still may be increased using --mapMemoryMax option.
+
+To see all map-related options use the --mapOption switch.
+
+When using the java map type it is recommended to specify the appropriate heap size using JVM option -Xmx<size>
+
+All size-related options must be of the form NU, where N is an integer and U is a unit specifier: k (kilobytes), m (megabytes), g (gigabytes), p(petabytes).
+
+
 
 Example:
 ```
-java -d64 -Xms8g -Xmx8g -jar CompScan.jar ...
+java -Xmx8g -jar CompScan.jar --mapType java ... (This will start the JVM in 64-bit mode with both the maximum heap size set to 8GB.)
+java -jar CompScan.jar --mapType direct ...     (use the off-heap map over plain RAM)
+java -jar CompScan.jar --mapType fs --mapDir /tmp/compscan ... (use the off-heap map over mapped files in the /tmp/compscan)
 ```
 
-This will start the JVM in 64-bit mode with both the minimum and maximum heap size set to 8GB.
 
 ## Adding new compression formats
 
@@ -64,3 +147,13 @@ Suppose we want to create a Zip compression format.
 5. CompressionInterface requires you to override and implement the compress() method: "public byte[] compress(byte[] data, int blockSize) { ... }". This method expects to receive a data buffer (data) of exactly one superblock in size and should return a (smaller) buffer containing the compressed data.
 
 Completing these steps successfully will cause the new compression class to be detected the next time the project is compiled. You may then access it by specifying "Zip" (case-sensitive) as the format argument on the command line.
+
+##Speed considerations
+There are 2 different cases (hold for fs and direct map types):
+1. The map fits into available system RAM
+The normal speed is 100-1000 kiloblocks/sec. The bottleneck is the speed of RAM for random IOs.
+2. The map doesn't fit into the RAM.
+The speed drops to less than 1 kiloblock/s.
+The bottleneck is HDD random access speed.
+To make the map more capable, use higher value for mapListSize (see above).
+

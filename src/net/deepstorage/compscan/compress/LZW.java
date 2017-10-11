@@ -1,57 +1,140 @@
-/**
- * CompScan - a tool for estimating the compressibility of a dataset.
- * 
- * Copyright (c) 2016 DeepStorage, LLC (deepstorage.net) and Ramon A. Lovato (ramonalovato.com).
- * 
- * See the file LICENSE for copying permission.
- */
 package net.deepstorage.compscan.compress;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import net.deepstorage.compscan.CompressionInterface;
 
-/**
- * A simple LZW implementation.
- * 
- * @see https://rosettacode.org/wiki/LZW_compression#Java
- * @version 1.0
- */
-public class LZW implements CompressionInterface {	
-	@Override
-	public byte[] compress(byte[] data, int blockSize) {
-		// Build the dictionary.
-        int dictSize = 256;
-        Map<String,Byte> dictionary = new HashMap<String,Byte>();
-        for (int i = 0; i < 256; i++)
-            dictionary.put("" + (byte) i, (byte) i);
- 
-        String w = "";
-        List<Byte> result = new ArrayList<Byte>();
-        for (byte b : data) {
-            String wb = w + b;
-            if (dictionary.containsKey(wb))
-                w = wb;
-            else {
-                result.add(dictionary.get(w));
-                // Add wc to the dictionary.
-                dictionary.put(wb, (byte) dictSize++);
-                w = "" + b;
-            }
-        }
- 
-        // Output the code for w.
-        if (!w.equals(""))
-            result.add(dictionary.get(w));
-        
-        byte[] output = new byte[result.size()];
-        for (int i = 0; i < output.length; i++) {
-        	output[i] = result.get(i);
-        }
-        return output;
-    }
-
+public class LZW implements CompressionInterface{
+   static final int TABLE_SIZE=1<<12;
+   
+   private class Node{
+      byte value;
+      int code, hash;
+      
+      Node next(byte b){
+         int i=indexMap.get(hash(b),key(b),-1);
+         if(i<0) return null;
+         return table[i];
+      }
+      
+      Node add(byte b){
+         int h=hash(b);
+         int k=key(b);
+         int code=nextCode();
+         Node n=table[code];
+         if(n==null) table[code]=n=new Node();
+         n.value=b;
+         n.code=code;
+         n.hash=h;
+         indexMap.put(h,k,code);
+         return n;
+      }
+      
+      private final int key(byte b){
+         return (code<<8)|(b&0xff);
+      }
+      private final int hash(byte b){
+         return (hash*317+b)*317;
+      }
+      
+      public String toString(){
+         return "Node(v="+value+", c="+code+", h="+hash+")";
+      }
+   }
+   
+   private final Node[] table=new Node[TABLE_SIZE];
+   private final IntMap indexMap=new IntMap(TABLE_SIZE*4);
+   
+   final Node rootNode=new Node();
+   
+   private int currentCode, threshold, width;
+   
+   private final BitWriter bitWriter=new BitWriter();
+   
+   public LZW(){
+      resetTable();
+   }
+   
+   public void resetTable(){
+      currentCode=0;
+      threshold=256;
+      width=8;
+      indexMap.clear();
+      for(int i=0;i<256;i++) rootNode.add((byte)i);
+   }
+   
+   public void setOptions(String s){
+      //
+   }
+   
+   public byte[] compress(byte[] data, int blockSize){
+//      resetTable(); //???
+      bitWriter.reset();
+      Node current=rootNode;
+      for(int i=0;i<data.length;i++){
+         byte b=data[i];
+         Node n=current.next(b);
+         if(n!=null){
+            current=n;
+            continue;
+         }
+         writeCode(current.code);
+         if(currentCode<TABLE_SIZE) current.add(b);
+//System.out.println("curr="+current+", next("+b+")="+current.next(b));
+         current=rootNode.next(b);
+//System.out.println("  curr -> "+current);
+      }
+      writeCode(current.code);
+      return bitWriter.toArray();
+   }
+   
+   private void writeCode(int c){
+      bitWriter.write(c,width);
+   }
+   
+   private int nextCode(){
+//      currentCode++;
+      if(currentCode>=threshold){
+         threshold<<=1;
+         width++;
+      }
+//      return currentCode;
+      return currentCode++;
+   }
+   
+   public String toString(){
+      return "LZW:"+TABLE_SIZE;
+   }
+   
+   
+   static int runs;
+   
+   public static void main(String[] args) throws Exception{
+      LZW lzw=new LZW();
+      byte[] data=new byte[2000];
+      for(int i=1;i<data.length;i++) data[i]=(byte)(i+data[i-1]*37);
+      
+      byte[] cdata=lzw.compress(data, data.length);
+      System.out.println("compression: "+data.length+" -> "+cdata.length);
+      
+      //heat up
+//      byte[] tmp=new byte[10];
+//      for(int i=30000;i-->0;) lzw.compress(tmp,tmp.length);
+      
+      runs=0;
+      Runnable r=new Runnable(){ public void run(){
+         lzw.compress(data,data.length);
+         runs++;
+      }};
+      System.out.println("LZW speed: "+(SpeedTest.run(r)*data.length)+" B/s");
+      System.out.println("currentCode: "+lzw.currentCode);
+      
+//      ByteArrayOutputStream buf=new ByteArrayOutputStream();
+//      java.util.zip.GZIPOutputStream gzip=new java.util.zip.GZIPOutputStream(buf);
+//      gzip.write(data);
+//      gzip.close();
+//      System.out.println("zipped: "+buf.size());
+//      
+////      FileOutputStream file=new FileOutputStream("data.bin");
+////      file.write(data);
+////      file.close();
+   }
 }

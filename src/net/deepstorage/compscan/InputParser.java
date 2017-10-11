@@ -10,14 +10,18 @@ package net.deepstorage.compscan;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.io.File;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Queue;
-
-import net.deepstorage.compscan.CompScan.ScanMode;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
+import java.lang.reflect.Field;
+import net.deepstorage.compscan.util.*;
 
 /**
  * CLI parser for CompScan.
@@ -34,15 +38,27 @@ public class InputParser {
 		"formatString"
 	};
 	
+   private static long MAP_MEMORY_MAX=1L<<47;  //128T: upper limit
+   private static int MAP_MEMORY_CHUNK=1<<27; //128M
+   //private static int MAP_LIST_SIZE=9; //faster but lower capacity (<RAM size>/130 hashes)
+   private static int MAP_LIST_SIZE=50; //slower but higher capacity (<RAM size>/40 hashes)
+   private static File MAP_DIR=new File(System.getProperty("user.dir"),".compscan/map");
+   static{
+      if(!MAP_DIR.exists()) MAP_DIR.mkdirs();
+   }
+   
+   private static boolean pause=false;
+ 
 	private CompScan compScan;
 	
 	private Map<String, Boolean> assigned;
 	
-	private double ioRate;
+	private Double ioRate;
 	private Path pathIn;
 	private Path pathOut;
-	private ScanMode scanMode;
-	private int blockSize;
+   private ScanMode scanMode;
+   private Object scanModeArg;
+   private int[] blockSizes;
 	private int superblockSize;
 	private String formatString;
 	private int bufferSize;
@@ -51,7 +67,8 @@ public class InputParser {
 	private boolean printHashes;
 	private boolean verbose;
 	private boolean printUsage;
-	
+   private Path logPath;
+   
 	/**
 	 * Constructor.
 	 * 
@@ -62,7 +79,6 @@ public class InputParser {
 		
 		this.compScan = compScan;
 		scanMode = ScanMode.NORMAL;
-		ioRate = compScan.getIORate();
 		bufferSize = CompScan.ONE_MB;
 		overwriteOK = false;
 		printHashes = false;
@@ -95,19 +111,42 @@ public class InputParser {
 		int count = 0;
 		while (it.hasNext()) {
 			String arg = it.next();
-			if (arg.startsWith("-")) {
+			if(arg.startsWith("-")) {
 				parseOptional(arg, it);
-			} else {
+			}
+			else{
 				parsePositional(arg, it, count++);
 			}
 		}
 		
-		checkPositionals();
-		
-		compScan.setup(ioRate, pathIn, pathOut, scanMode, blockSize, superblockSize, bufferSize, overwriteOK,
-				compressor, printHashes, verbose, printUsage);
+      checkOptionals();
+      checkPositionals();
+      
+      compScan.setup(
+         ioRate, pathIn, pathOut, scanMode, scanModeArg,
+         blockSizes, superblockSize, bufferSize, overwriteOK, 
+         compressor, printHashes, verbose, printUsage, logPath
+		);
 		printConfig();
-	}
+      
+      //remove direct memory limit
+      try{
+         Class vm=Class.forName("sun.misc.VM");
+         Field directMemory=vm.getDeclaredField("directMemory");
+         directMemory.setAccessible(true);
+         directMemory.set(null,MAP_MEMORY_MAX);
+      }
+      catch(Exception e){
+         e.printStackTrace();
+         System.out.println("Failed to change direct memory limit; use -XX:MaxDirectMemorySize=.. option to avoid OutOfMemoryException");
+      }
+      
+      if(pause) try{
+         System.out.println("press 'Enter' to continue");
+         System.in.read();
+      }
+      catch(IOException e){}
+   }
 	
 	/**
 	 * Parse a single positional argument.
@@ -146,10 +185,12 @@ public class InputParser {
 		// Block size.
 		case "blockSize":
 			try {
-				blockSize = Integer.parseInt(arg);
-				if (blockSize < 1) {
-					throw new NumberFormatException();
-				}
+			   String[] s=arg.split(",");
+				blockSizes=new int[s.length];
+            for(int i=0;i<s.length;i++){
+               blockSizes[i]=Util.parseSize(s[i]).intValue();
+               if(blockSizes[i] < 1) throw new NumberFormatException(s[i]);
+            }
 			} catch (NumberFormatException ex) {
 				throw new IllegalArgumentException(
 						String.format(
@@ -160,10 +201,11 @@ public class InputParser {
 		// Superblock size.
 		case "superblockSize":
 			try {
-				superblockSize = Integer.parseInt(arg);
-				if (superblockSize < 1 || superblockSize < blockSize) {
-					throw new NumberFormatException();
-				}
+            superblockSize = Util.parseSize(arg).intValue();
+            int maxBs=Arrays.stream(blockSizes).max().getAsInt();
+            if (superblockSize < 1 || superblockSize < maxBs) throw new NumberFormatException(
+               superblockSize+" ("+maxBs+")"
+            );
 			} catch (NumberFormatException ex) {
 				throw new IllegalArgumentException(
 						String.format(
@@ -175,7 +217,7 @@ public class InputParser {
 		// Compression format.
 		case "formatString":
 			formatString = arg;
-			compressor = new Compressor(blockSize, superblockSize, formatString);
+			compressor = new Compressor(superblockSize, formatString);
 			break;
 		// Default.
 		default:
@@ -214,12 +256,27 @@ public class InputParser {
 			printUsage = true;
 			break;
 		// VMDK mode.
-		case "--vmdk":
-			scanMode = ScanMode.VMDK;
+		case "--mode":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "--mode requires the following mode specifier: NORMAL, BIG, VMDK"
+         );
+         try{
+            scanMode=ScanMode.valueOf(it.next());
+         }
+         catch(Exception e){
+            throw new IllegalArgumentException("bad mode specifier, should be one of "+Arrays.asList(ScanMode.values()));
+         }
+         scanModeArg=scanMode.parseArg(it);
 			break;
 		// IO rate.
-		case "--rate":
-			if (!it.hasNext()) {
+      case "--log":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "missing file value to the log option"
+         );
+         logPath=Paths.get(it.next());
+         break;
+      case "--rate":
+         if (!it.hasNext()) {
 				throw new IllegalArgumentException(
 						"Reached end of arguments without finding value for rate.");
 			}
@@ -229,10 +286,9 @@ public class InputParser {
 					throw new NumberFormatException();
 				}
 			} catch (NumberFormatException ex) {
-				throw new IllegalArgumentException(
-						String.format(
-								"Optional parameter rate requires nonnegative integer (default: %1$f = unlimited MB/sec).",
-								CompScan.UNLIMITED));
+				throw new IllegalArgumentException(String.format(
+               "Optional parameter rate requires nonnegative integer, MB/sec (default: unlimited)."
+            ));
 			}
 			break;
 		// Input buffer size.
@@ -256,18 +312,93 @@ public class InputParser {
 		case "--overwrite":
 			overwriteOK = true;
 			break;
-		case "--hashes":
-			printHashes = true;
-			break;
-		// Default.
-		default:
+      case "--hashes":
+         printHashes = true;
+         break;
+      case "--mapType":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for map type"
+         );
+         Supplier<MdMap> sup;
+         String type=it.next();
+         switch(type){
+            case "java":
+               sup=new JavaMapSupplier(SHA1Encoder.MD_SIZE);
+               break;
+            case "direct":
+               sup=new DirectMapSupplier(
+                  SHA1Encoder.MD_SIZE, MAP_LIST_SIZE,
+                  MAP_MEMORY_CHUNK, MAP_MEMORY_MAX
+               );
+               break;
+            case "fs":
+               sup=new FsMapSupplier(
+                  SHA1Encoder.MD_SIZE, MAP_LIST_SIZE,
+                  MAP_MEMORY_CHUNK, MAP_MEMORY_MAX, MAP_DIR
+               );
+               break;
+            default: throw new IllegalArgumentException("Illegal option for map type: "+type);
+         }
+         CompScan.bigMapSupplier=sup;
+         break;
+      case "--mapDir":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for map directory"
+         );
+         MAP_DIR=new File(it.next());
+         break;
+      case "--mapOptions":
+         CompScan.printMapOptions();
+         System.exit(0);
+      case "--mapMemoryMax":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for map size"
+         );
+         MAP_MEMORY_MAX=Util.parseSize(it.next());
+         break;
+      case "--mapMemoryChunk":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for map chunk"
+         );
+         long size=Util.parseSize(it.next());
+         if(size>Integer.MAX_VALUE) throw new IllegalArgumentException(
+            "mapMemoryChunk ("+size+") cannot exceed "+Integer.MAX_VALUE
+         );
+         MAP_MEMORY_CHUNK=(int)size;
+         break;
+      case "--mapListSize":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for map list size"
+         );
+         MAP_LIST_SIZE=Integer.parseInt(it.next());
+         break;
+      case "--threads":
+         if(!it.hasNext()) throw new IllegalArgumentException(
+            "Reached end of arguments for thread count"
+         );
+         Executor.setPoolSize(Integer.parseInt(it.next()));
+         break;
+      case "--pause":
+         pause=true;
+         break;
+      // Default.
+      default:
 			throw new IllegalArgumentException(
 					String.format(
 							"Unknown optional argument \"%1$s\".", arg));
 		}
 	}
 	
-	/**
+   private void checkOptionals(){
+      if(CompScan.bigMapSupplier==null){
+         CompScan.bigMapSupplier=new FsMapSupplier(
+            SHA1Encoder.MD_SIZE, MAP_LIST_SIZE,
+            MAP_MEMORY_CHUNK, MAP_MEMORY_MAX, MAP_DIR
+         );
+      }
+   }
+   
+   /**
 	 * Check that all positional arguments were assigned.
 	 */
 	private void checkPositionals() {
@@ -301,18 +432,22 @@ public class InputParser {
 				"    - overwriteOK:       %8$s%n" +
 				"    - printHashes:       %9$s%n" +
 				"    - formatString:      %10$s%n" +
-				"    - verbose:           %11$s%n",
-				(ioRate == CompScan.UNLIMITED ? "UNLIMITED" : Double.toString(ioRate)),
+            "    - verbose:           %11$s%n"+
+            "    - map type:          %12$s%n"+
+            "    - threads:           %13$s%n",
+            (ioRate == null ? "UNLIMITED" : Double.toString(ioRate)),
 				pathIn,
 				pathOut,
 				scanMode.toString(),
-				blockSize,
+				Util.toString(blockSizes),
 				superblockSize,
 				bufferSize,
 				Boolean.toString(overwriteOK),
 				Boolean.toString(printHashes),
 				formatString,
-				Boolean.toString(verbose)
+				Boolean.toString(verbose),
+				CompScan.bigMapSupplier,
+				Executor.getPoolSize()
 				);
 		System.out.println(setupString);
 	}
