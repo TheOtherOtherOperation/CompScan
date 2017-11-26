@@ -257,8 +257,9 @@ public class CompScan {
    		}
    		
    		try {
-            // Hash results are saved incrementally in VMDK mode, so don't need to do anything here.
+            // Hash results per file are saved incrementally in VMDK mode, so don't need to do anything here.
             // now save compression results
+            System.out.println("Compression statistics:");
             for(int i=0;i<blockSizes.length;i++){
                final int ind=i;
                String resultString=makeFileResultString(
@@ -267,6 +268,13 @@ public class CompScan {
                );
                writeResults("totals_"+blockSizes[i]+".csv", resultString, overwriteOK);
                System.out.println(resultString);
+            }
+            System.out.println("Overall hash counts:");
+            for(int i=0;i<blockSizes.length;i++){
+               String s=totals[i].makeHashCounterString();
+               writeResults("hash_"+blockSizes[i]+".csv", s, overwriteOK);
+               System.out.println(blockSizes[i]+":");
+               System.out.println(s);
             }
             System.out.println(String.format("%n--> Output saved in \"%s\".%n", pathOut));
    		}
