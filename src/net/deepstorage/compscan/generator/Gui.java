@@ -350,6 +350,7 @@ e.printStackTrace();
       //System.out.println(Arrays.asList(range(6,15)));
       
       Gui gui=new Gui();
+      gui.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
       gui.pack();
       gui.show();
 
