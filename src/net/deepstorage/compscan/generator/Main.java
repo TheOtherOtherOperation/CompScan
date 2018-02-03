@@ -140,18 +140,6 @@ public class Main{
    private static String lastLine;
    
    public static void main(String[] args) throws Exception{
-args=new String[]{
-   "--blockSize", "4k",
-   "--superblockSize", "12k",
-   "--out", "d:/tmp/compscan/generated",
-   "--prefix", "testfile-",
-   "--numFiles", "2",
-   "--compression", "0.5",
-   "--compressor", "GZIP:5",
-   "--size", "10m",
-   "--dedup", "0.2",
-   "--overwrite",
-};
       Iterator<String> argi=Arrays.asList(args).iterator();
       App app=new App();
       while(argi.hasNext()){
