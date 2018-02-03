@@ -109,7 +109,7 @@ public class Gui extends JFrame{
    private void start(){
       console.setText("");
       try{
-         PrintWriter log=new PrintWriter(new FileWriter("generator.log"));
+         PrintWriter log=new PrintWriter(new FileWriter("generator.log"), true);
          try{
             app.reset();
             setup();
@@ -118,16 +118,15 @@ public class Gui extends JFrame{
             }).start();
          }
          catch(Exception e){
-            UiUtil.errMsg(this, "Starting", e.getMessage());
             e.printStackTrace(log);
-e.printStackTrace();
+            UiUtil.errMsg(this, "Parsing parameters", e.getMessage());
          }
          finally{
             log.close();
          }
       }
       catch(Exception e){
-e.printStackTrace();
+         e.printStackTrace();
          UiUtil.errMsg(this, "Opening log file", e.getMessage());
       }
    }
@@ -155,7 +154,6 @@ e.printStackTrace();
          catch(Exception e){
             println("Unexpected error: "+e.getMessage());
             e.printStackTrace(log);
-e.printStackTrace();
             return;
          }
       }
@@ -186,7 +184,7 @@ e.printStackTrace();
       ;
       app.blockSize=getBlockSize();
       app.superblockSize= superblockSizeField.currentValue==null? 
-         null: superblockSizeField.currentValue.intValue()
+         null: superblockSizeField.currentValue.intValue()*app.blockSize
       ;
       app.outputPath=outputPathField.getText();
       app.createMissingDir=createOutput.isSelected();
@@ -352,6 +350,7 @@ e.printStackTrace();
       Gui gui=new Gui();
       gui.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
       gui.pack();
+      UiUtil.toCenter(gui);
       gui.show();
 
 //      JFrame frame=new JFrame("test");

@@ -35,7 +35,7 @@ public class SpeedTest {
    }
    
    //quasy-random data
-   private static int fillqr(byte[] data, int seed){
+   static int fillqr(byte[] data, int seed){
       for(int i=0;i<data.length;i++){
          data[i]=(byte)seed;
          seed^=seed<<13;

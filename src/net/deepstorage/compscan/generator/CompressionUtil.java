@@ -53,6 +53,7 @@ public class CompressionUtil{
          }
       }
       copyAndEraze(randomData,bestN,data,randomIndex);
+System.out.println("CompressionUtil.generate(): test: "+compressor.compress(data,-1).length);
       return data;
    }
    
@@ -116,11 +117,11 @@ public class CompressionUtil{
 //      System.out.println(Util.toString(data));
 //      System.out.println(Util.toString(randomData(size)));
       
-//      CompressionInterface cpr=new GZIP();
-//      final int totalSize=1<<20;
-//      byte[] data=generate(cpr, 0.5f, totalSize);
-//      int totalSize1=cpr.compress(data,-1).length;
-//      System.out.println(totalSize+" -> "+totalSize1+", ration: "+(1f*totalSize1/totalSize));
+      CompressionInterface cpr=new GZIP();
+      final int totalSize=1024;
+      byte[] data=generate(cpr, 0.5f, totalSize);
+      int totalSize1=cpr.compress(data,-1).length;
+      System.out.println(totalSize+" -> "+totalSize1+", ratio: "+(1f*totalSize1/totalSize));
 //      
 //      int size=4*1024;
 //      System.out.println("chunks("+size+"):");

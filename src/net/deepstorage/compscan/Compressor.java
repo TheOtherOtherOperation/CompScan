@@ -138,7 +138,7 @@ public class Compressor {
 	 * @throws BufferLengthException if data.length > buffSize.
 	 */
    public Function<Integer,CompressionInfo> process(byte[] data) throws BufferLengthException {
-		if (data.length != buffer.length) {
+      if (data.length != buffer.length) {
 			throw new BufferLengthException(
 					String.format(
 							"Compressor.feedData requires exactly one superblock of data: %1$d bytes given, %2$d bytes expected.",
@@ -147,7 +147,7 @@ public class Compressor {
 		
 		// We want the input data to be exactly one superblock in size. 
 		byte[] compressed = compressionInterface.compress(data, -1);
-		return blockSize->{synchronized(Compressor.this){
+      return blockSize->{synchronized(Compressor.this){
          bytesRead+=data.length;
          superblocksRead+=1;
          compressedBytes+=compressed.length;

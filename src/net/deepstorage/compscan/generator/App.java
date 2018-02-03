@@ -7,6 +7,7 @@ import java.util.function.*;
 import java.util.function.*;
 import net.deepstorage.compscan.CompressionInterface;
 import net.deepstorage.compscan.compress.*;
+import net.deepstorage.compscan.util.Util;
 
 public class App {
    public static class BadParam extends RuntimeException{
@@ -208,20 +209,22 @@ public class App {
    public static void main(String[] args) throws Exception{
       App app=new App();
       app.hashesDefSupplier=()->new int[][]{
-         {1,5},
-         {5,1}
+         {49,1},
+         {1,51}
+//         {1,5},
+//         {5,1}
       };
       app.compressor=new GZIP(6);
-      app.compressionRatio=0.4f;
-      app.blockSize=2048;
-      app.superblockSize=3*2048;
+      app.compressionRatio=0.5f;
+      app.blockSize=4*1024;
+      app.superblockSize=8*1024;
       
-      app.outputPath="D:/tmp/compscan/generated";
+      app.outputPath="../tmp/test/CompScan-master/test/app"; //"D:/tmp/compscan/generated";
       app.createMissingDir=true;
       app.overrideOutput=true;
-      app.filenamePrefix="test";
+      app.filenamePrefix="app";
       app.fileCount=5;
-      app.indexOffset=1;
+      app.indexOffset=0;
       app.fileIndexFormat="00";
       
       Stage s=app.start();

@@ -3,12 +3,13 @@ package net.deepstorage.compscan.compress;
 import java.io.*;
 import java.util.zip.*;
 import net.deepstorage.compscan.*;
+import net.deepstorage.compscan.util.Util;
 import net.deepstorage.compscan.Compressor.BufferLengthException;
 
 public class GZIP implements CompressionInterface{
    public final static int BEST_SPEED=Deflater.BEST_SPEED;
    public final static int BEST_COMPRESSION=Deflater.BEST_COMPRESSION;
-   public final static int DEFAULT_COMPRESSION=Deflater.DEFAULT_COMPRESSION;
+   public final static int DEFAULT_COMPRESSION=6;//Deflater.DEFAULT_COMPRESSION;
    
    private final ByteArrayOutputStream buffer=new ByteArrayOutputStream();
    private final GZIPOutputStream gzip;
@@ -42,12 +43,13 @@ public class GZIP implements CompressionInterface{
       }
       catch(NumberFormatException e){
          throw new IllegalArgumentException(
-            "Wrong option to LZ4 compressor: "+s+", expect number 0 to 17"
+            "Wrong option to LZ4 compressor: "+s+", e.lengthxpect number 0 to 17"
          );
       }
    }
    
-   public byte[] compress(byte[] data, int blockSize) throws BufferLengthException{
+   //same instance is reused, synchronize
+   public synchronized byte[] compress(byte[] data, int blockSize) throws BufferLengthException{
       buffer.reset();
       deflater.reset();
       try{
@@ -65,8 +67,14 @@ public class GZIP implements CompressionInterface{
    }
    
    public static void main(String[] args) throws Exception{
-      SpeedTest.test(new GZIP(BEST_SPEED));
-      SpeedTest.test(new GZIP(DEFAULT_COMPRESSION));
-      SpeedTest.test(new GZIP(BEST_COMPRESSION));
+      GZIP gzip=new GZIP();
+      byte[] data=new byte[2048];
+      SpeedTest.fillqr(data, 1);
+      System.out.println(gzip.compress(data,-1).length);
+      System.out.println(gzip.compress(data,-1).length);
+      System.out.println(gzip.compress(data,-1).length);
+//      SpeedTest.test(new GZIP(BEST_SPEED));
+//      SpeedTest.test(new GZIP(DEFAULT_COMPRESSION));
+//      SpeedTest.test(new GZIP(BEST_COMPRESSION));
    }
 }
