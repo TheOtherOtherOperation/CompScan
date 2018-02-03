@@ -49,10 +49,8 @@ public class Compressor {
 			throw new IllegalArgumentException("Format string cannot be null or empty string.");
 		}
 		this.formatString = formatString;
-      String[] formatParts=formatString.split(":");
       try {
-         compressionInterface = getCompressionInterface(formatParts[0]);
-         if(formatParts.length>1) compressionInterface.setOptions(formatParts[1]);
+         compressionInterface = getCompressionInterface(formatString);
 			System.out.println(String.format("Using compression interface \"%s\".%n", formatString));
 		} catch (ClassNotFoundException e) {
 			throw new IllegalArgumentException(
@@ -68,7 +66,27 @@ public class Compressor {
 		clearBuffer();
 	}
 	
-	/**
+   public static CompressionInterface getCompressionInterface(String formatString) throws Exception { 
+      String[] formatParts=formatString.split(":");
+      formatString=formatParts[0];
+      String compressName = String.join(".", Compressor.class.getPackage().getName(), CompScan.COMPRESSION_SUBPACKAGE, formatString);
+      
+      Class<?> compression = Class.forName(compressName);
+      Set<Class<?>> interfaces = new HashSet<>(
+            Arrays.asList(
+                  compression.getInterfaces()));
+      if (!interfaces.contains(CompressionInterface.class)) {
+         throw new Exception(
+               String.format(
+                     "Class \"%1$s\" found for format string \"%2$s\" but is not a valid Compressor.",
+                     compression.getClass().getName(), formatString));
+      }
+      CompressionInterface compressionInterface=(CompressionInterface) compression.newInstance();
+      if(formatParts.length>1) compressionInterface.setOptions(formatParts[1]);
+      return compressionInterface;
+   }
+   
+   /**
 	 * Clear the internal data buffer.
 	 */
 	private void clearBuffer() {
@@ -84,22 +102,6 @@ public class Compressor {
 	 * @return Method "compress(byte[] data)" associated with the CompressionInterface for formatString.
 	 * @throws IllegalArgumentException if the Compressor for the format string does not exist.
 	 */
-	private CompressionInterface getCompressionInterface(String formatString) throws Exception {	
-		String compressName = String.join(".", getClass().getPackage().getName(), CompScan.COMPRESSION_SUBPACKAGE, formatString);
-		
-		Class<?> compression = Class.forName(compressName);
-		Set<Class<?>> interfaces = new HashSet<>(
-				Arrays.asList(
-						compression.getInterfaces()));
-		if (!interfaces.contains(CompressionInterface.class)) {
-			throw new Exception(
-					String.format(
-							"Class \"%1$s\" found for format string \"%2$s\" but is not a valid Compressor.",
-							compression.getClass().getName(), formatString));
-		}
-		return (CompressionInterface) compression.newInstance();
-	}
-	
 	/**
 	 * Getter for buffer size.
 	 * 
