@@ -16,7 +16,7 @@ public class HashesDefFile implements Supplier<int[][]>{
    
    public HashesDefFile(String path){
       file=new File(path);
-      if(!file.exists() || !file.isFile()) throw new App.BadParam("Hashes file not found: "+path);
+      if(!file.exists() || !file.isFile()) throw new App.BadParam("Histogram file not found: "+path);
    }
    
    public int[][] get(){

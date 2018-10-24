@@ -11,7 +11,7 @@ import net.deepstorage.compscan.generator.*;
 public class HashesDefPanel extends JPanel{
    private final String byFileId="BY_FILE";
    private final String byRatioId="BY_RATIO";
-   private final JRadioButton byFileBtn = new JRadioButton("From hashes file");
+   private final JRadioButton byFileBtn = new JRadioButton("From histogram file");
    private final JRadioButton byRatioBtn = new JRadioButton("By deduplication ratio");
    {
       ButtonGroup g = new ButtonGroup();
@@ -54,9 +54,8 @@ public class HashesDefPanel extends JPanel{
       setLayout(new GridLayout(1,1));
       Component byFileCard=UiUtil.makeVBox(1,0,1, 2, new Component[]{
          UiUtil.vglue(),
-         filePathField,
          UiUtil.makeHBox(1,0,0, 5, new Component[]{
-            UiUtil.hglue(), fileOkLabel, UiUtil.hgap(5), browseBtn
+            filePathField, UiUtil.hgap(2), fileOkLabel, UiUtil.hgap(10), browseBtn
          }),
          UiUtil.vglue()
       });
@@ -93,8 +92,8 @@ public class HashesDefPanel extends JPanel{
       byRatioBtn.addActionListener(e->{
          cardLayout.show(cards, byRatioId);
       });
-      add(UiUtil.makeVBox(0,0,1, 5, new Component[]{
-         UiUtil.makeHBox(0,0,1, 5, new Component[]{
+      add(UiUtil.makeVBox(0,0,1, 0, new Component[]{
+         UiUtil.makeHBox(0,0,1, 2, new Component[]{
             byFileBtn, byRatioBtn, UiUtil.hglue()
          }),
          cards,
@@ -107,9 +106,10 @@ public class HashesDefPanel extends JPanel{
          })
       );
       browseBtn.addActionListener(e->{
-         filePathField.setText(UiUtil.requestFile(
+         File f=UiUtil.requestFile(
             HashesDefPanel.this, AppConfig.CSV_FILES, null
-         ).getPath());
+         );
+         if(f!=null) filePathField.setText(f.getPath());
       });
       sizeField.listeners.add(v->checkSize());
       ratioField.listeners.add(v->ratioOkLabel.setValue(v!=null));

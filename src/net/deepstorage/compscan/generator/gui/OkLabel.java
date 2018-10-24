@@ -7,8 +7,8 @@ public class OkLabel extends JLabel{
    private static final Icon okIcon=new ImageIcon(UiUtil.getResource(
       "net/deepstorage/compscan/generator/gui/ok.png"
    ));
-   private static final Icon warnIcon=new ImageIcon(UiUtil.getResource(
-      "net/deepstorage/compscan/generator/gui/warn.png"
+   private static final Icon editIcon=new ImageIcon(UiUtil.getResource(
+      "net/deepstorage/compscan/generator/gui/editgray.png"
    ));
    
    public OkLabel(){
@@ -19,7 +19,7 @@ public class OkLabel extends JLabel{
    }
    
    public void setValue(boolean b){
-      setIcon(b? okIcon: warnIcon);
+      setIcon(b? okIcon: editIcon);
    }
    
    public static void main(String[] args) {

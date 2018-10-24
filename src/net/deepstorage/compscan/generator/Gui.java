@@ -213,22 +213,22 @@ public class Gui extends JFrame{
    
    private Component buildGenerationPanel(){
       return UiUtil.makeVBox(0,0,1, 0, new Component[]{
-         UiUtil.titledBox("Hashes", hashesDefPanel),
+         UiUtil.titledBox("Data specification", hashesDefPanel),
          UiUtil.makeHBox(0,0,1, 0, new Component[]{
             UiUtil.makeGrid(
-               new float[]{0,1}, new float[]{1,1}, true, false, 5, 3, 
+               new float[]{0,1}, new float[]{1,1}, true, false, 5, 0, 
                new Component[][]{
                   {
-                     UiUtil.makeHBox(1,0,0, 5, new Component[]{
-                        UiUtil.hglue(), new JLabel("Compression ratio"), UiUtil.hgap(20)
+                     UiUtil.makeHBox(0,0,1, 5, new Component[]{
+                        new JLabel("Compression ratio"), UiUtil.hgap(20)
                      }),
                      UiUtil.makeHBox(0,0,1, 5, new Component[]{
                         cpRatioField, UiUtil.hgap(3), cpRatioOk, UiUtil.hglue()
                      }),
                   },
                   {
-                     UiUtil.makeHBox(1,0,0, 2, new Component[]{
-                        UiUtil.hglue(), new JLabel("Compression method"), UiUtil.hgap(20)
+                     UiUtil.makeHBox(0,0,1, 2, new Component[]{
+                        new JLabel("Compression method"), UiUtil.hgap(20)
                      }),
                      UiUtil.makeHBox(0,0,1, 2, new Component[]{
                         cpMethod, UiUtil.hgap(3), cpOption, UiUtil.hglue()
@@ -238,22 +238,22 @@ public class Gui extends JFrame{
             ),
             UiUtil.hgap(30),
             UiUtil.makeGrid(
-               new float[]{0,1}, new float[]{1,1,1,1}, true, false, 5, 3, 
+               new float[]{0,1}, new float[]{0,1f}, true, false, 5, 0, 
                new Component[][]{
                   {
-                     UiUtil.makeHBox(1,0,0, 2, new Component[]{
-                        UiUtil.hglue(), new JLabel("Block size"), UiUtil.hgap(20)
+                     UiUtil.makeHBox(0,0,1, 2, new Component[]{
+                        new JLabel("Block size"), UiUtil.hgap(20)
                      }),
                      UiUtil.makeHBox(0,0,1, 2, new Component[]{
-                        blockSizeField, UiUtil.hgap(1), blockSizeUnits, UiUtil.hgap(3), blockSizeOk, UiUtil.hglue()
+                        blockSizeField, UiUtil.hgap(2), blockSizeOk, UiUtil.hgap(2), blockSizeUnits, UiUtil.hglue()
                      }),
                   },
                   {
-                     UiUtil.makeHBox(1,0,0, 2, new Component[]{
-                        UiUtil.hglue(), new JLabel("Superblock size"), UiUtil.hgap(20)
+                     UiUtil.makeHBox(0,0,1, 2, new Component[]{
+                        new JLabel("Superblock size"), UiUtil.hgap(20)
                      }),
                      UiUtil.makeHBox(0,0,1, 2, new Component[]{
-                        superblockSizeField, UiUtil.hgap(10), new JLabel("blocks"), UiUtil.hglue()
+                        superblockSizeField, UiUtil.vgap(25), UiUtil.hgap(10), new JLabel("blocks"), UiUtil.hglue()
                      }),
                   }
                }
@@ -265,45 +265,44 @@ public class Gui extends JFrame{
    
    private Component buildOutputPanel(){
       return UiUtil.makeVBox(0,1,0, 5, new Component[]{
-         outputPathField,
-         UiUtil.makeHBox(0,1,0, 5, new Component[]{
-            UiUtil.makeHBox(0,0,0, 0, new Component[]{
-               createOutput, UiUtil.hgap(30), overwriteOutput
-            }),
-            UiUtil.hgap(40),
-            UiUtil.makeHBox(0,0,0, 0, new Component[]{
-               outputPathOk, UiUtil.hgap(3), outputBrowseBtn
-            }),
+         UiUtil.makeHBox(1,0,0, 0, new Component[]{
+            outputPathField, UiUtil.hgap(2), outputPathOk, UiUtil.hgap(10), outputBrowseBtn
          }),
-         UiUtil.makeGrid(
-            new float[]{0,1}, new float[]{0,0,0}, true, false,3,3,
-            new Component[][]{
-               {
-                  UiUtil.makeHBox(1,0,0, 0, new Component[]{
-                     UiUtil.hglue(), new JLabel("File prefix")
-                  }),
-                  UiUtil.makeHBox(0,0,1, 0, new Component[]{
-                     prefixField, UiUtil.hgap(3), prefixOk, UiUtil.hglue()
-                  }),
-               },
-               {
-                  UiUtil.makeHBox(1,0,0, 0, new Component[]{
-                     UiUtil.hglue(), new JLabel("File count")
-                  }),
-                  UiUtil.makeHBox(0,0,1, 0, new Component[]{
-                     fcField, UiUtil.hglue()
-                  }),
-               },
-               {
-                  UiUtil.makeHBox(1,0,0, 0, new Component[]{
-                     UiUtil.hglue(), new JLabel("File numbering offset")
-                  }),
-                  UiUtil.makeHBox(0,0,1, 0, new Component[]{
-                     fcOffField, UiUtil.hglue()
-                  }),
-               },
-            }
-         )
+         UiUtil.makeHBox(0,1,0, 0, new Component[]{
+            UiUtil.makeGrid(
+               new float[]{0,1}, new float[]{0,0,0}, true, false,3,3,
+               new Component[][]{
+                  {
+                     UiUtil.makeHBox(1,0,0, 0, new Component[]{
+                        UiUtil.hglue(), new JLabel("File prefix")
+                     }),
+                     UiUtil.makeHBox(0,0,1, 0, new Component[]{
+                        prefixField, UiUtil.hgap(3), prefixOk, UiUtil.hglue()
+                     }),
+                  },
+                  {
+                     UiUtil.makeHBox(1,0,0, 0, new Component[]{
+                        UiUtil.hglue(), new JLabel("File count")
+                     }),
+                     UiUtil.makeHBox(0,0,1, 0, new Component[]{
+                        fcField, UiUtil.vgap(24)
+                     }),
+                  },
+                  {
+                     UiUtil.makeHBox(1,0,0, 0, new Component[]{
+                        UiUtil.hglue(), new JLabel("File numbering offset")
+                     }),
+                     UiUtil.makeHBox(0,0,1, 0, new Component[]{
+                        fcOffField, UiUtil.vgap(24)
+                     }),
+                  },
+               }
+            ),
+            UiUtil.hglue(),
+            UiUtil.makeVBox(0,0,1, 10, new Component[]{
+               createOutput, overwriteOutput, UiUtil.hglue()
+            })
+         })
       });
    }
    
@@ -332,7 +331,7 @@ public class Gui extends JFrame{
          File dir=new File(outputPathField.getText());
          if(!dir.exists()) dir=null;
          dir=UiUtil.requestDir("Select output directory", dir);
-         outputPathField.setText(dir.getAbsolutePath());
+         if(dir!=null) outputPathField.setText(dir.getAbsolutePath());
       });
       outputPathField.getDocument().addDocumentListener(
          UiUtil.onAnyDocumentChange(()->{
