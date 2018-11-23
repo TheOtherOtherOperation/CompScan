@@ -16,6 +16,7 @@ The <arguments> part is described below.
 The lz4.jar can be found in the 'lib' directory.
 
 #Examples.
+
 ```
 Windows:
 D:\CompScan>java -cp lib/lz4-1.3.jar;CompScan.jar net.deepstorage.compscan.CompScan --mode BIG 1200m C:\inputDir C:\outputDir 4096 16384 LZ4
@@ -35,6 +36,7 @@ compression scheme: LZ4
 mode: separate files bigger than 1200 megabytes
 
 ## Arguments
+
 ```
 Usage: CompScan [-h] [--help] [--pause] [--threads <number>] [--mapType (java|direct|fs)] [--mapDir <path>] [--mapOptions] [--mode (NORMAL|BIG <size>|VMDK)] [--overwrite] [--rate MB_PER_SEC] [--buffer-size BUFFER_SIZE] pathIn pathOut blockSize superblockSize format[:<options>]
 Positional Arguments
@@ -158,7 +160,8 @@ The bottleneck is HDD random access speed.
 To make the map more capable, use higher value for mapListSize (see above).
 
 
-##Data generator
+#Data generator
+
 Generates data that conforms given compressibility and dedupability.
 The code is in the net.deepstorage.generator package.
 Console app: net.deepstorage.compscan.generator.Main
