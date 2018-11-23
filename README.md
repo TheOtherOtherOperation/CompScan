@@ -150,7 +150,7 @@ Suppose we want to create a Zip compression format.
 
 Completing these steps successfully will cause the new compression class to be detected the next time the project is compiled. You may then access it by specifying "Zip" (case-sensitive) as the format argument on the command line.
 
-##Speed considerations
+## Speed considerations
 There are 2 different cases (hold for fs and direct map types):
 1. The map fits into available system RAM
 The normal speed is 100-1000 kiloblocks/sec. The bottleneck is the speed of RAM for random IOs.
@@ -160,7 +160,7 @@ The bottleneck is HDD random access speed.
 To make the map more capable, use higher value for mapListSize (see above).
 
 
-#Data generator
+# Data generator
 
 Generates data that conforms given compressibility and dedupability.
 The code is in the net.deepstorage.generator package.
