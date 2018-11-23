@@ -157,3 +157,14 @@ The speed drops to less than 1 kiloblock/s.
 The bottleneck is HDD random access speed.
 To make the map more capable, use higher value for mapListSize (see above).
 
+
+##Data generator
+Generates data that conforms given compressibility and dedupability.
+The code is in the net.deepstorage.generator package.
+Console app: net.deepstorage.compscan.generator.Main
+GUI app: net.deepstorage.compscan.generator.Gui
+Windows scripts:
+Run in console mode: bin/generator-console.bat
+Run in GUI mode: bin/generator-gui.bat
+
+
